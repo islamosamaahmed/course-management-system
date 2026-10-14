@@ -1,5 +1,5 @@
-const CACHE = 'stc-shell-v1';
-const SHELL = ['/', '/index.html', '/styles.css', '/student-qr.css', '/app.js', '/manifest.webmanifest', '/favicon.svg'];
+const CACHE = 'stc-shell-v11';
+const SHELL = ['/', '/index.html', '/styles.css', '/student-qr.css', '/interactive-study.css', '/app.js', '/interactive-study.js', '/manifest.webmanifest', '/favicon.svg'];
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)).then(() => self.skipWaiting()));
 });

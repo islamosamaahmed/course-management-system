@@ -11,20 +11,22 @@ export class DatabaseBackupError extends Error {
 }
 
 const tables = [
-  'courses', 'levels', 'users', 'groups_table', 'course_settings', 'level_course_prices',
+  'courses', 'levels', 'users', 'google_accounts', 'groups_table', 'course_settings', 'level_course_prices',
   'students', 'enrollments', 'subjects', 'course_sessions', 'attendance', 'payments',
-  'auth_sessions', 'audit_logs', 'schema_migrations', 'notifications',
+  'auth_sessions', 'google_accounts', 'audit_logs', 'schema_migrations', 'notifications',
   'course_lectures', 'exams', 'exam_questions', 'exam_attempts',
   'exam_attempt_questions', 'exam_answers', 'exam_integrity_events', 'certificates',
   'exam_certificates',
-  'course_materials', 'system_wipe_requests'
+  'course_materials', 'system_wipe_requests', 'study_units', 'study_lessons', 'study_sections',
+  'study_questions', 'study_lesson_progress', 'study_question_attempts'
 ];
 const identityTables = new Set([
   'courses', 'levels', 'groups_table', 'users', 'students', 'enrollments',
   'course_sessions', 'attendance', 'payments', 'audit_logs', 'notifications',
   'course_settings', 'subjects', 'course_lectures', 'exams', 'exam_questions',
   'exam_attempts', 'exam_attempt_questions', 'exam_answers', 'exam_integrity_events',
-  'certificates', 'exam_certificates', 'course_materials'
+  'certificates', 'exam_certificates', 'course_materials', 'study_units', 'study_lessons',
+  'study_sections', 'study_questions', 'study_question_attempts'
 ]);
 const doctorUsernames = new Set(['rashad', 'elnashar', 'elalfy']);
 const quoteIdentifier = value => `"${value.replaceAll('"', '""')}"`;
@@ -78,7 +80,8 @@ export async function restoreDatabaseBackup(db, buffer, actor) {
   }
   if (payload?.format !== 'course-postgres-backup' || payload.version !== 1 ||
       !payload.data || typeof payload.data !== 'object' || Array.isArray(payload.data) ||
-      tables.some(table => ['certificates', 'exam_certificates', 'course_materials', 'system_wipe_requests'].includes(table)
+      tables.some(table => ['certificates', 'exam_certificates', 'course_materials', 'system_wipe_requests', 'google_accounts',
+        'study_units', 'study_lessons', 'study_sections', 'study_questions', 'study_lesson_progress', 'study_question_attempts'].includes(table)
         ? payload.data[table] !== undefined && !Array.isArray(payload.data[table])
         : !Array.isArray(payload.data[table])) ||
       Object.keys(payload.data).some(table => !tables.includes(table))) {
@@ -88,6 +91,13 @@ export async function restoreDatabaseBackup(db, buffer, actor) {
   payload.data.exam_certificates ||= [];
   payload.data.course_materials ||= [];
   payload.data.system_wipe_requests ||= [];
+  payload.data.google_accounts ||= [];
+  payload.data.study_units ||= [];
+  payload.data.study_lessons ||= [];
+  payload.data.study_sections ||= [];
+  payload.data.study_questions ||= [];
+  payload.data.study_lesson_progress ||= [];
+  payload.data.study_question_attempts ||= [];
   const preparedUsers = prepareBackupUsers(payload.data.users, actor);
   payload.data.users = preparedUsers.users;
   const { restoredActor } = preparedUsers;

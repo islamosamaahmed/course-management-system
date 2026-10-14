@@ -1,0 +1,249 @@
+﻿/* ============================================================
+   NOVA DARK â€” Ù‡ÙˆÙŠØ© Ø¬Ø¯ÙŠØ¯Ø© Ø¨Ø§Ù„ÙƒØ§Ù…Ù„ (CSS ÙÙ‚Ø·)
+   Ø¯Ø§ÙƒÙ† Ø¹ØµØ±ÙŠ Ø¬Ø±ÙŠØ¡: Ø²Ø¬Ø§Ø¬ Ø¹Ù…ÙŠÙ‚ + Ù†ÙŠÙˆÙ† Ø¨Ù†ÙØ³Ø¬ÙŠ/Ø³Ù…Ø§ÙˆÙŠ + Ø²ÙˆØ§ÙŠØ§ Ø³Ø®ÙŠØ©.
+   ÙŠÙØ­Ù…ÙŽÙ‘Ù„ Ø¨Ø¹Ø¯ styles.css. Ø¨Ø¯ÙˆÙ† Ø£ÙŠ ØªØºÙŠÙŠØ± ÙÙŠ JS Ø£Ùˆ HTML Ø£Ùˆ API.
+   ============================================================ */
+
+:root{
+  --r-xs:12px; --r-sm:16px; --r-md:20px; --r-lg:26px; --r-xl:36px;
+  --r-pill:999px;
+  --font-ar:"IBM Plex Sans Arabic","Segoe UI",Tahoma,Arial,sans-serif;
+  --ease:cubic-bezier(.4,0,.2,1);
+  --ease-out:cubic-bezier(.16,1,.3,1);
+  --ease-spring:cubic-bezier(.34,1.3,.64,1);
+  --t-fast:.16s; --t:.25s; --t-slow:.45s;
+  --btn-h:50px;
+  /* Nova palette */
+  --nova-bg:#060a15;
+  --nova-bg-2:#0a1120;
+  --nova-panel:rgba(17,25,42,.72);
+  --nova-solid:#0d1526;
+  --nova-ink:#f1f5f9;
+  --nova-ink-2:#cbd5e1;
+  --nova-muted:#8b98ad;
+  --nova-line:rgba(148,163,184,.15);
+  --nova-line-2:rgba(148,163,184,.28);
+  --nova-violet:#8b5cf6;
+  --nova-cyan:#22d3ee;
+  --nova-rose:#fb7185;
+  --nova-emerald:#34d399;
+  --nova-amber:#fbbf24;
+  --nova-glow:rgba(139,92,246,.4);
+  --nova-glow-cyan:rgba(34,211,238,.28);
+  --focus-ring:0 0 0 4px rgba(139,92,246,.35);
+  --glass-blur:blur(24px) saturate(150%);
+  --sh-soft:0 1px 2px rgba(0,0,0,.4),0 10px 32px rgba(0,0,0,.35);
+  --sh-lift:0 4px 8px rgba(0,0,0,.4),0 22px 55px rgba(0,0,0,.5);
+  --sh-modal:0 30px 90px rgba(0,0,0,.65),0 8px 24px rgba(0,0,0,.4);
+  color-scheme:dark;
+  /* remap app tokens to Nova */
+  --ink:var(--nova-ink);
+  --ink-2:var(--nova-ink-2);
+  --ink-3:var(--nova-muted);
+  --primary:var(--nova-violet);
+  --primary-hi:#a78bfa;
+  --primary-soft:rgba(139,92,246,.14);
+  --primary-glow:rgba(139,92,246,.4);
+  --violet:var(--nova-cyan);
+  --violet-hi:#67e8f9;
+  --teal:var(--nova-emerald);
+  --teal-hi:#6ee7b7;
+  --rose:var(--nova-rose);
+  --rose-soft:rgba(251,113,133,.13);
+  --amber:var(--nova-amber);
+  --muted:var(--nova-muted);
+  --line:var(--nova-line);
+  --line-2:var(--nova-line-2);
+  --bg:var(--nova-bg);
+  --surface:var(--nova-panel);
+  --surface-solid:var(--nova-solid);
+  --surface-2:rgba(17,25,42,.45);
+  --surface-3:#16203a;
+  --table-head:rgba(13,21,38,.85);
+  --table-border:rgba(148,163,184,.1);
+  --table-row-hover:rgba(139,92,246,.08);
+  --sh-1:var(--sh-soft);
+  --sh-2:var(--sh-soft);
+  --sh-3:var(--sh-lift);
+  --sh-4:var(--sh-modal);
+  --sh-glow:0 0 0 1px rgba(139,92,246,.35),0 12px 44px rgba(139,92,246,.3);
+  --sh-glow-teal:0 0 0 1px rgba(34,211,238,.3),0 12px 44px rgba(34,211,238,.25);
+}
+
+/* ---------- Base: deep space background ---------- */
+html{font-size:16px;-webkit-text-size-adjust:100%}
+body{
+  font-family:var(--font-ar);
+  line-height:1.8;
+  background:
+    radial-gradient(1100px 600px at 85% -10%,rgba(139,92,246,.16),transparent 60%),
+    radial-gradient(900px 550px at 10% 0%,rgba(34,211,238,.1),transparent 60%),
+    radial-gradient(800px 700px at 50% 115%,rgba(139,92,246,.1),transparent 60%),
+    var(--nova-bg);
+  background-attachment:scroll;
+  color:var(--nova-ink);
+  text-wrap:pretty;
+}
+.aurora-bg{display:none!important}
+
+/* ---------- Typography: bold Arabic-first hierarchy ---------- */
+h1,h2,h3,h4{line-height:1.4;letter-spacing:-.3px;text-wrap:balance;overflow-wrap:anywhere;font-weight:800}
+.topbar h1{font-size:clamp(22px,2.6vw,32px);font-weight:800}
+.topbar h1,.panel-head h2,.modal-head h2{
+  background:linear-gradient(120deg,#fff 30%,#c4b5fd 70%,#67e8f9 100%);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.panel h2,.panel-head h2{font-weight:800;letter-spacing:-.3px;font-size:1.05rem}
+.panel-head p,.topbar p,.muted,.sub{line-height:1.85;color:var(--nova-muted)}
+p,li,td,th,label{overflow-wrap:anywhere}
+small,.muted,.field-hint,.notification-footer{font-size:.83rem;line-height:1.75}
+table{font-size:.88rem;font-variant-numeric:tabular-nums}
+.stat strong,.tag,.filters select,.field input{font-variant-numeric:tabular-nums}
+button,input,select,textarea{font-family:var(--font-ar);line-height:1.6}
+::placeholder{opacity:.6}
+
+/* ---------- Entrance motion (fast, subtle) ---------- */
+@keyframes nova-page-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:none}}
+@keyframes nova-card-in{from{opacity:0;transform:translateY(14px) scale(.99)}to{opacity:1;transform:none}}
+@keyframes nova-fade-in{from{opacity:0}to{opacity:1}}
+@keyframes nova-pop-in{from{opacity:0;transform:translateY(20px) scale(.95)}to{opacity:1;transform:none}}
+@keyframes nova-sheet-up{from{opacity:0;transform:translateY(48px)}to{opacity:1;transform:none}}
+@keyframes nova-glow-pulse{0%,100%{opacity:.7}50%{opacity:1}}
+.content>*,.login-side form>*{animation:nova-page-in .45s var(--ease-out) both}
+/* ---------- NOVA buttons (same classes, new look) ---------- */
+.button,.login-btn,.welcome-message-button,.ai-chat-send-btn{
+  --btn-bg:linear-gradient(135deg,#8b5cf6,#6d28d9 55%,#22d3ee 140%);
+  --btn-ink:#fff;--btn-border:rgba(255,255,255,.14);
+  --btn-shadow:0 8px 26px rgba(139,92,246,.4),inset 0 1px 0 rgba(255,255,255,.28);
+  display:inline-flex;align-items:center;justify-content:center;gap:8px;
+  min-height:var(--btn-h);padding:13px 24px;border-radius:var(--r-md);
+  border:1px solid var(--btn-border);background:var(--btn-bg);color:var(--btn-ink);
+  font-weight:800;font-size:.92rem;letter-spacing:.2px;line-height:1.4;
+  box-shadow:var(--btn-shadow);cursor:pointer;user-select:none;white-space:nowrap;
+  position:relative;overflow:hidden;isolation:isolate;
+  transition:transform var(--t-fast) var(--ease),box-shadow var(--t) var(--ease),filter var(--t) var(--ease),background var(--t) var(--ease),border-color var(--t) var(--ease);
+}
+.button::before,.login-btn::before{
+  content:"";position:absolute;inset:0;z-index:-1;
+  background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.35) 50%,transparent 70%);
+  transform:translateX(-130%);transition:transform .7s var(--ease-out);
+}
+.button:hover::before,.login-btn:hover::before{transform:translateX(130%)}
+.button:hover,.login-btn:hover,.welcome-message-button:hover{transform:translateY(-2px);box-shadow:var(--sh-lift),0 14px 38px rgba(139,92,246,.5);filter:brightness(1.06)}
+.button:active,.login-btn:active{transform:translateY(1px) scale(.98)}
+.button:focus-visible,.login-btn:focus-visible,.icon-button:focus-visible{outline:none;box-shadow:var(--focus-ring)}
+.button:disabled{opacity:.5;cursor:not-allowed;transform:none;filter:grayscale(.3)}
+.button.secondary{--btn-bg:rgba(20,30,52,.85);--btn-ink:var(--nova-ink);--btn-border:var(--nova-line-2);--btn-shadow:var(--sh-soft);font-weight:700;backdrop-filter:blur(12px)}
+.button.secondary::before{display:none}
+.button.secondary:hover{background:rgba(139,92,246,.16);border-color:var(--nova-violet);color:#fff;box-shadow:var(--sh-glow)}
+.button.danger,.button.destructive{--btn-bg:linear-gradient(135deg,#fb7185,#e11d48);--btn-shadow:0 8px 26px rgba(251,113,133,.4),inset 0 1px 0 rgba(255,255,255,.25)}
+.button.danger:hover,.button.destructive:hover{box-shadow:0 14px 38px rgba(251,113,133,.5)}
+.button.success{--btn-bg:linear-gradient(135deg,#34d399,#0d9488);--btn-shadow:0 8px 26px rgba(52,211,153,.38),inset 0 1px 0 rgba(255,255,255,.25)}
+.button.success:hover{box-shadow:0 14px 38px rgba(52,211,153,.5)}
+.button.warning{--btn-bg:linear-gradient(135deg,#fbbf24,#f97316);--btn-shadow:0 8px 26px rgba(251,191,36,.38),inset 0 1px 0 rgba(255,255,255,.25);color:#221003}
+.button.warning:hover{box-shadow:0 14px 38px rgba(251,191,36,.5)}
+.button.ghost,.button.ghost-button{--btn-bg:transparent;--btn-ink:#c4b5fd;--btn-border:transparent;--btn-shadow:none}
+.button.ghost:hover,.button.ghost-button:hover{background:rgba(139,92,246,.14);box-shadow:none;color:#fff}
+.button.small,.button.sm{min-height:40px;padding:8px 15px;font-size:.8rem;border-radius:var(--r-sm)}
+.button.large,.button.lg{min-height:60px;padding:17px 32px;font-size:1rem;border-radius:var(--r-lg)}
+.button.block,.button.full{width:100%}
+.icon-button,.theme-toggle,.password-toggle,.mobile-menu-button,.mobile-drawer-close,.mobile-header-bell{
+  display:inline-flex;align-items:center;justify-content:center;min-width:46px;min-height:46px;
+  border-radius:var(--r-sm);border:1px solid var(--nova-line-2);
+  background:rgba(20,30,52,.85);color:var(--nova-ink);box-shadow:var(--sh-soft);
+  transition:transform var(--t-fast) var(--ease),background var(--t) var(--ease),border-color var(--t) var(--ease),color var(--t) var(--ease),box-shadow var(--t) var(--ease);
+}
+.icon-button:hover,.theme-toggle:hover{border-color:var(--nova-violet);color:#fff;background:rgba(139,92,246,.18);transform:translateY(-2px);box-shadow:var(--sh-glow)}
+.icon-button:active,.theme-toggle:active{transform:translateY(1px) scale(.96)}
+.delete-button{display:inline-flex;align-items:center;gap:8px}
+.ripple{background:rgba(255,255,255,.45)}
+/* ---------- NOVA glass modals (same markup) ---------- */
+.modal-backdrop,.welcome-message-backdrop,.mobile-drawer-backdrop{
+  background:rgba(3,6,14,.68);
+  backdrop-filter:blur(26px) saturate(140%);
+  -webkit-backdrop-filter:blur(26px) saturate(140%);
+  animation:nova-fade-in .3s var(--ease-out) both;
+}
+.modal,.welcome-message-card,.ai-chat-dialog{
+  border-radius:var(--r-xl);
+  border:1px solid rgba(148,163,184,.2);
+  background:linear-gradient(180deg,rgba(26,36,62,.92),rgba(13,21,38,.94));
+  backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
+  box-shadow:var(--sh-modal),0 0 0 1px rgba(255,255,255,.05) inset,0 0 60px rgba(139,92,246,.12);
+  animation:nova-pop-in .42s var(--ease-spring) both;
+  overflow:hidden;color:var(--nova-ink);
+}
+.modal{padding:28px}
+.modal::before,.welcome-message-card::before{
+  content:"";position:absolute;top:0;inset-inline:0;height:3px;
+  background:linear-gradient(90deg,#8b5cf6,#22d3ee,#34d399,#8b5cf6);
+  background-size:200% 100%;animation:nova-glow-pulse 3s ease-in-out infinite;
+}
+.modal-head{
+  gap:12px;padding:22px 28px;margin:-28px -28px 20px;
+  border-bottom:1px solid var(--nova-line);
+  background:rgba(10,17,32,.72);backdrop-filter:blur(18px);
+  position:sticky;top:0;z-index:2;
+}
+.modal-head h2{font-size:1.15rem;line-height:1.6}
+.welcome-message-card{padding:32px 28px 24px;text-align:center}
+.welcome-message-kicker{color:#a78bfa;font-weight:800;letter-spacing:.5px}
+.welcome-message-body{font-size:1rem;line-height:2;color:var(--nova-ink-2)}
+.welcome-message-signature{color:var(--nova-muted)}
+.welcome-message-button{width:100%;min-height:52px}
+.ai-chat-dialog{border-radius:var(--r-lg)}
+.ai-chat-header{background:linear-gradient(135deg,rgba(139,92,246,.2),rgba(13,21,38,.9))}
+.form-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:22px}
+.form-actions .button{flex:1 1 160px}
+/* ---------- NOVA surfaces: cards, stats, notices ---------- */
+.stat,.panel,.table-wrap,.notification-card,.follow-up-card,.google-account-status,.report-card{
+  border-radius:var(--r-lg);border:1px solid var(--nova-line);
+  background:linear-gradient(180deg,rgba(24,33,58,.78),rgba(13,21,38,.82));
+  backdrop-filter:var(--glass-blur);-webkit-backdrop-filter:var(--glass-blur);
+  box-shadow:var(--sh-soft);position:relative;overflow:hidden;
+}
+.stat::after,.panel::after{
+  content:"";position:absolute;top:0;inset-inline:0;height:1px;
+  background:linear-gradient(90deg,transparent,rgba(139,92,246,.5),rgba(34,211,238,.4),transparent);
+  pointer-events:none;
+}
+.panel{padding:clamp(18px,2.4vw,28px);margin-bottom:20px}
+.panel-head{flex-wrap:wrap;row-gap:12px;margin-bottom:18px}
+.panel-head p{font-size:.85rem}
+.stat{padding:22px}
+.stat:hover{transform:translateY(-4px);box-shadow:var(--sh-lift),0 0 44px rgba(139,92,246,.16);border-color:rgba(139,92,246,.4)}
+.stat .stat-icon{width:48px;height:48px;border-radius:16px;display:grid;place-items:center;font-size:22px;background:rgba(139,92,246,.16);color:#c4b5fd;margin-bottom:14px;box-shadow:inset 0 1px 0 rgba(255,255,255,.12)}
+.stat:nth-child(2) .stat-icon{background:rgba(34,211,238,.14);color:#67e8f9}
+.stat:nth-child(3) .stat-icon{background:rgba(251,113,133,.14);color:#fda4af}
+.stat:nth-child(4) .stat-icon{background:rgba(251,191,36,.14);color:#fcd34d}
+.stat span{display:block;color:var(--nova-muted);font-size:.83rem;font-weight:600}
+.stat strong{display:block;font-size:clamp(24px,2.6vw,34px);font-weight:800;letter-spacing:-.5px;color:#fff;margin-top:8px}
+.notice{border-radius:var(--r-md);padding:14px 16px;border:1px solid var(--nova-line);background:rgba(20,30,52,.7);font-size:.88rem;line-height:1.85;color:var(--nova-ink-2)}
+.notice.error{border-color:rgba(251,113,133,.4);background:rgba(251,113,133,.1)}
+.tag{min-height:34px;padding:6px 15px;border-radius:var(--r-pill);font-size:.78rem;font-weight:800;white-space:nowrap;display:inline-flex;align-items:center;gap:6px;background:rgba(139,92,246,.16);color:#c4b5fd;border:1px solid rgba(139,92,246,.35)}
+.tag.off{background:rgba(251,113,133,.13);color:#fda4af;border-color:rgba(251,113,133,.35)}
+.tag.success{background:rgba(52,211,153,.13);color:#6ee7b7;border-color:rgba(52,211,153,.35)}
+
+/* ---------- NOVA inputs / filters ---------- */
+.field label{font-size:.83rem;font-weight:700;color:var(--nova-ink-2)}
+.field input,.field select,.field textarea,.search-input,.filters select,.filters input,
+.input-group input,.date-time-picker .date-time-input,.sidebar-search input,.ai-chat-input{
+  border-radius:var(--r-md);min-height:50px;font-size:.95rem;color:var(--nova-ink);
+  background:rgba(8,14,28,.75);border:1.5px solid var(--nova-line-2);
+  transition:border-color var(--t-fast) var(--ease),box-shadow var(--t-fast) var(--ease),background var(--t-fast) var(--ease);
+}
+.field input:hover,.field select:hover,.field textarea:hover,.search-input:hover{border-color:var(--nova-violet)}
+.field input:focus,.field select:focus,.field textarea:focus,.search-input:focus,
+.filters select:focus,.filters input:focus,.input-group input:focus,.sidebar-search input:focus,.ai-chat-input:focus{
+  border-color:var(--nova-violet);box-shadow:var(--focus-ring);outline:none;background:rgba(10,17,32,.9);
+}
+.field textarea{min-height:120px;line-height:1.85}
+select,.filters select,.field select{cursor:pointer}
+select option,select optgroup{background-color:#0d1526;color:#f1f5f9}
+.filters{gap:10px}
+.filters .search-input{flex:1 1 220px;min-width:min(100%,220px)}
+.pagination{display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap}
+.content>.panel:nth-child(2),.content>.grid:nth-child(2){animation-delay:.05s}
+.content>.panel:nth-child(3),.content>.grid:nth-child(3){animation-delay:.1s}
+.content>.panel:nth-child(4){animation-delay:.15s}
+.stat,.panel,.table-wrap,.notification-card,.follow-up-card{animation:nova-card-in .5s var(--ease-out) both}

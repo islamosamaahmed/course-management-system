@@ -1,7 +1,10 @@
 import { randomInt, randomUUID } from 'node:crypto';
+import express from 'express';
 import { S3Client, GetObjectCommand, HeadObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { createPresignedPost } from '@aws-sdk/s3-presigned-post';
+import { mkdir, open, stat, unlink, writeFile } from 'node:fs/promises';
+import { resolve } from 'node:path';
 import { audit, token, transaction } from './db.js';
 import { formatClockTime, sessionStartsAtUtc } from './session-reminders.js';
 import { shareSlug } from './share-links.js';
@@ -52,6 +55,14 @@ const shuffled = values => {
 const integrityStatus = score => score >= 6 ? 'high' : score >= 3 ? 'review' : 'normal';
 const LIBRARY_BUCKET = 'stc-course-library';
 const MAX_LIBRARY_FILE_SIZE = 20 * 1024 * 1024;
+const localDevelopment = process.env.LOCAL_DEV === '1';
+const localLibraryDirectory = resolve('data/course-materials');
+const localLibraryPath = key => {
+  if (typeof key !== 'string' || !/^materials\/\d+\/\d+\/[0-9a-f-]{36}$/i.test(key)) {
+    fail(500, 'مسار ملف المكتبة غير صالح');
+  }
+  return resolve(localLibraryDirectory, ...key.split('/'));
+};
 let libraryS3Client;
 const libraryStorage = () => {
   const { AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, AWS_ENDPOINT_URL_S3, AWS_REGION } = process.env;
@@ -68,6 +79,14 @@ const libraryStorage = () => {
   }
   return libraryS3Client;
 };
+export async function deleteDoctorLibraryFiles(db, doctorId) {
+  const materials = (await db.query(`SELECT m.storage_key FROM course_materials m
+    JOIN subjects s ON s.id=m.subject_id WHERE s.doctor_id=? ORDER BY m.id`, [doctorId])).rows;
+  for (const material of materials) {
+    if (localDevelopment) await unlink(localLibraryPath(material.storage_key));
+    else await libraryStorage().send(new DeleteObjectCommand({ Bucket: LIBRARY_BUCKET, Key: material.storage_key }));
+  }
+}
 const libraryFileTypes = {
   'application/pdf': ['.pdf'],
   'image/jpeg': ['.jpg', '.jpeg'],
@@ -100,6 +119,11 @@ const studentOnly = (req, res, next) => {
 };
 
 export function registerAcademicRoutes(app, db) {
+  const libraryDisposition = fileName => {
+    const filename = encodeURIComponent(fileName).replace(/[!'()*]/g, character =>
+      `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+    return `inline; filename="course-material"; filename*=UTF-8''${filename}`;
+  };
   const librarySubjects = async levelId => await (await db.query(`SELECT s.id,s.name,s.level_id,l.name level_name
     FROM subjects s JOIN levels l ON l.id=s.level_id WHERE s.level_id=? ORDER BY s.name,s.id`, [levelId])).rows;
   const libraryItems = async (where, parameters) => await (await db.query(`SELECT m.id,m.subject_id,m.level_id,m.title,m.description,
@@ -114,15 +138,22 @@ export function registerAcademicRoutes(app, db) {
     return material;
   };
   const signedLibraryDownload = async material => {
-    const key = material.storage_key;
-    const filename = encodeURIComponent(material.file_name).replace(/[!'()*]/g, character =>
-      `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
-    const disposition = `inline; filename="course-material"; filename*=UTF-8''${filename}`;
     return getSignedUrl(libraryStorage(), new GetObjectCommand({
-      Bucket: LIBRARY_BUCKET, Key: key,
+      Bucket: LIBRARY_BUCKET, Key: material.storage_key,
       ResponseContentType: material.content_type,
-      ResponseContentDisposition: disposition
+      ResponseContentDisposition: libraryDisposition(material.file_name)
     }), { expiresIn: 300 });
+  };
+  const deliverLibraryFile = async (material, res, next) => {
+    if (!localDevelopment) {
+      res.redirect(302, await signedLibraryDownload(material));
+      return;
+    }
+    res.type(material.content_type);
+    res.set('Content-Disposition', libraryDisposition(material.file_name));
+    res.sendFile(localLibraryPath(material.storage_key), error => {
+      if (error) next(error);
+    });
   };
   const subjectOwned = async (id, doctorId) => {
     const subject = await (await db.query('SELECT * FROM subjects WHERE id=?', [id])).rows[0];
@@ -186,6 +217,19 @@ export function registerAcademicRoutes(app, db) {
     const file = validateLibraryFile(req.body);
     const uploadId = randomUUID();
     const key = `materials/${subject.level_id}/${subject.id}/${uploadId}`;
+    if (localDevelopment) {
+      res.json({
+        upload_id: uploadId,
+        url: `/api/academic/library/upload/${subject.id}/${uploadId}`,
+        local: true,
+        subject_id: subject.id,
+        level_id: subject.level_id,
+        title,
+        description,
+        ...file
+      });
+      return;
+    }
     const signedFields = {
       key,
       'Content-Type': file.content_type,
@@ -207,6 +251,27 @@ export function registerAcademicRoutes(app, db) {
     res.json({ upload_id: uploadId, ...signedPost, subject_id: subject.id, level_id: subject.level_id, title, description, ...file });
   });
 
+  if (localDevelopment) {
+    app.put('/api/academic/library/upload/:subjectId/:uploadId', doctorOnly, express.raw({
+      type: Object.keys(libraryFileTypes),
+      limit: MAX_LIBRARY_FILE_SIZE
+    }), async (req, res) => {
+      const subject = await subjectOwned(integer(req.params.subjectId), req.user.id);
+      if (!/^[0-9a-f-]{36}$/i.test(req.params.uploadId)) fail(400, 'معرّف الرفع غير صحيح');
+      if (!Buffer.isBuffer(req.body) || !req.body.length) fail(400, 'محتوى الملف غير صالح');
+      const contentType = req.get('content-type')?.split(';')[0];
+      if (!Object.hasOwn(libraryFileTypes, contentType)) fail(400, 'يسمح بملفات PDF وJPG وPNG فقط');
+      if (!validLibrarySignature(contentType, req.body.subarray(0, 8))) {
+        fail(400, 'محتوى الملف لا يطابق نوعه؛ ارفع PDF أو صورة سليمة');
+      }
+      const key = `materials/${subject.level_id}/${subject.id}/${req.params.uploadId}`;
+      const filePath = localLibraryPath(key);
+      await mkdir(resolve(filePath, '..'), { recursive: true });
+      await writeFile(filePath, req.body, { flag: 'wx' });
+      res.status(204).end();
+    });
+  }
+
   app.post('/api/academic/library/cancel-upload', doctorOnly, async (req, res) => {
     fields(req.body, ['upload_id', 'subject_id']);
     if (typeof req.body.upload_id !== 'string' || !/^[0-9a-f-]{36}$/i.test(req.body.upload_id)) fail(400, 'معرّف الرفع غير صحيح');
@@ -214,6 +279,14 @@ export function registerAcademicRoutes(app, db) {
     const key = `materials/${subject.level_id}/${subject.id}/${req.body.upload_id}`;
     if (await (await db.query('SELECT id FROM course_materials WHERE storage_key=?', [key])).rows[0]) {
       return res.json({ ok: true, retained: true });
+    }
+    if (localDevelopment) {
+      try {
+        await unlink(localLibraryPath(key));
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error;
+      }
+      return res.json({ ok: true });
     }
     const storage = libraryStorage();
     try {
@@ -235,25 +308,44 @@ export function registerAcademicRoutes(app, db) {
     const description = req.body.description === undefined ? '' : text(req.body.description, 'الوصف', 0, 1000);
     const file = validateLibraryFile(req.body);
     const key = `materials/${subject.level_id}/${subject.id}/${req.body.upload_id}`;
-    const storage = libraryStorage();
-    let uploaded;
-    try {
-      uploaded = await storage.send(new HeadObjectCommand({ Bucket: LIBRARY_BUCKET, Key: key }));
-    } catch (error) {
-      if (error.$metadata?.httpStatusCode === 404 || error.name === 'NotFound' || error.name === 'NoSuchKey') {
-        fail(409, 'لم يصل الملف إلى المخزن بعد؛ أعد رفعه وحاول مجددًا');
+    let signatureBytes;
+    if (localDevelopment) {
+      try {
+        const uploaded = await stat(localLibraryPath(key));
+        if (uploaded.size !== file.file_size) fail(400, 'حجم الملف المرفوع لا يطابق البيانات');
+        const handle = await open(localLibraryPath(key), 'r');
+        try {
+          signatureBytes = Buffer.alloc(8);
+          const { bytesRead } = await handle.read(signatureBytes, 0, signatureBytes.length, 0);
+          signatureBytes = signatureBytes.subarray(0, bytesRead);
+        } finally {
+          await handle.close();
+        }
+      } catch (error) {
+        if (error.code === 'ENOENT') fail(409, 'لم يصل الملف إلى التخزين المحلي بعد؛ أعد رفعه وحاول مجددًا');
+        throw error;
       }
-      throw error;
+    } else {
+      const storage = libraryStorage();
+      let uploaded;
+      try {
+        uploaded = await storage.send(new HeadObjectCommand({ Bucket: LIBRARY_BUCKET, Key: key }));
+      } catch (error) {
+        if (error.$metadata?.httpStatusCode === 404 || error.name === 'NotFound' || error.name === 'NoSuchKey') {
+          fail(409, 'لم يصل الملف إلى المخزن بعد؛ أعد رفعه وحاول مجددًا');
+        }
+        throw error;
+      }
+      if (uploaded.ContentLength !== file.file_size || uploaded.ContentType !== file.content_type ||
+          uploaded.Metadata?.['upload-id'] !== req.body.upload_id ||
+          uploaded.Metadata?.['doctor-id'] !== String(req.user.id)) {
+        fail(400, 'تعذر التحقق من الملف المرفوع؛ أعد المحاولة');
+      }
+      const signature = await storage.send(new GetObjectCommand({
+        Bucket: LIBRARY_BUCKET, Key: key, Range: 'bytes=0-7'
+      }));
+      signatureBytes = Buffer.from(await signature.Body.transformToByteArray());
     }
-    if (uploaded.ContentLength !== file.file_size || uploaded.ContentType !== file.content_type ||
-        uploaded.Metadata?.['upload-id'] !== req.body.upload_id ||
-        uploaded.Metadata?.['doctor-id'] !== String(req.user.id)) {
-      fail(400, 'تعذر التحقق من الملف المرفوع؛ أعد المحاولة');
-    }
-    const signature = await storage.send(new GetObjectCommand({
-      Bucket: LIBRARY_BUCKET, Key: key, Range: 'bytes=0-7'
-    }));
-    const signatureBytes = Buffer.from(await signature.Body.transformToByteArray());
     if (!validLibrarySignature(file.content_type, signatureBytes)) fail(400, 'محتوى الملف لا يطابق نوعه؛ ارفع PDF أو صورة سليمة');
     const id = await transaction(db, async () => {
       const inserted = await db.query(`INSERT INTO course_materials
@@ -271,13 +363,13 @@ export function registerAcademicRoutes(app, db) {
     res.status(201).json({ id });
   });
 
-  app.get('/api/academic/library/:id/file', doctorOnly, async (req, res) => {
+  app.get('/api/academic/library/:id/file', doctorOnly, async (req, res, next) => {
     const material = await (await db.query('SELECT * FROM course_materials WHERE id=?', [integer(req.params.id)])).rows[0];
     if (!material) fail(404, 'الملف غير موجود');
-    res.redirect(302, await signedLibraryDownload(material));
+    await deliverLibraryFile(material, res, next);
   });
 
-  app.get('/api/library/share/:id/file', async (req, res) => {
+  app.get('/api/library/share/:id/file', async (req, res, next) => {
     const id = integer(req.params.id);
     let material;
     if (req.user.role === 'student') {
@@ -289,7 +381,7 @@ export function registerAcademicRoutes(app, db) {
     } else {
       fail(403, 'مشاركة ملفات المكتبة متاحة للدكاترة والطلاب فقط');
     }
-    res.redirect(302, await signedLibraryDownload(material));
+    await deliverLibraryFile(material, res, next);
   });
 
   app.get('/api/library/share/:id', async (req, res) => {
@@ -314,7 +406,11 @@ export function registerAcademicRoutes(app, db) {
     const material = await (await db.query('SELECT * FROM course_materials WHERE id=?', [id])).rows[0];
     if (!material) fail(404, 'الملف غير موجود');
     if (material.uploaded_by !== req.user.id) fail(403, 'يمكنك حذف الملفات التي أضفتها فقط');
-    await libraryStorage().send(new DeleteObjectCommand({ Bucket: LIBRARY_BUCKET, Key: material.storage_key }));
+    if (localDevelopment) {
+      await unlink(localLibraryPath(material.storage_key));
+    } else {
+      await libraryStorage().send(new DeleteObjectCommand({ Bucket: LIBRARY_BUCKET, Key: material.storage_key }));
+    }
     await transaction(db, async () => {
       await db.query('DELETE FROM course_materials WHERE id=? AND uploaded_by=?', [id, req.user.id]);
       await audit(db, req.user, 'حذف ملف من مكتبة المحاضرات', 'course_material', id, {
@@ -339,10 +435,10 @@ export function registerAcademicRoutes(app, db) {
     res.json({ items: items.map(({ uploaded_by, ...item }) => item), subjects });
   });
 
-  app.get('/api/student/library/:id/file', studentOnly, async (req, res) => {
+  app.get('/api/student/library/:id/file', studentOnly, async (req, res, next) => {
     const student = await studentForUser(req.user.id);
     const material = await libraryMaterial(integer(req.params.id), student.level_id);
-    res.redirect(302, await signedLibraryDownload(material));
+    await deliverLibraryFile(material, res, next);
   });
 
   const eligibleExam = async (examId, student) => {
@@ -455,6 +551,7 @@ export function registerAcademicRoutes(app, db) {
     const levelId = req.body.level_id === undefined ? subject.level_id : integer(req.body.level_id);
     if (!await (await db.query('SELECT id FROM levels WHERE id=?', [levelId])).rows[0]) fail(400, 'الفرقة غير موجودة');
     if (levelId !== subject.level_id && await (await db.query('SELECT id FROM course_lectures WHERE subject_id=? LIMIT 1', [subject.id])).rows[0]) fail(409, 'لا يمكن تغيير فرقة مادة لها محاضرات');
+    if (levelId !== subject.level_id && await (await db.query('SELECT id FROM study_units WHERE subject_id=? LIMIT 1', [subject.id])).rows[0]) fail(409, 'لا يمكن تغيير فرقة مادة لها وحدات للمذاكرة التفاعلية');
     await db.query(`UPDATE subjects SET name=?,level_id=?,updated_at=to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') WHERE id=? AND doctor_id=?`, [name, levelId, subject.id, req.user.id]);
     await audit(db, req.user, 'تعديل مادة', 'subject', subject.id, { before: subject.name, after: name, level_id: levelId });
     res.json({ ok: true });
@@ -463,6 +560,7 @@ export function registerAcademicRoutes(app, db) {
   app.delete('/api/academic/subjects/:id', doctorOnly, async (req, res) => {
     const subject = await subjectOwned(integer(req.params.id), req.user.id);
     if (await (await db.query('SELECT id FROM course_lectures WHERE subject_id=? LIMIT 1', [subject.id])).rows[0]) fail(409, 'لا يمكن حذف مادة لها محاضرات');
+    if (await (await db.query('SELECT id FROM study_units WHERE subject_id=? LIMIT 1', [subject.id])).rows[0]) fail(409, 'لا يمكن حذف مادة لها وحدات للمذاكرة التفاعلية');
     await transaction(db, async () => {
       await db.query('DELETE FROM subjects WHERE id=? AND doctor_id=?', [subject.id, req.user.id]);
       await audit(db, req.user, 'حذف مادة', 'subject', subject.id, { name: subject.name });
@@ -627,7 +725,7 @@ export function registerAcademicRoutes(app, db) {
       WHERE q.id=? AND e.doctor_id=?`, [integer(req.params.id), req.user.id])).rows[0];
     if(!question) fail(404,'السؤال غير موجود');
     const exam=await examOwned(question.exam_id,req.user.id);
-    if(exam.status!=='draft') fail(409,'لا يمكن تعديل سؤال بعد نشر الاختبار');
+    if(exam.status==='closed') fail(409,'لا يمكن تعديل سؤال في اختبار مغلق');
     const questionText=req.body.question_text===undefined?question.question_text:text(req.body.question_text,'نص السؤال',1,4000);
     let options=questionOptions(question.options_json),correct=question.correct_answer;
     if(question.question_type==='multiple_choice'&&req.body.options!==undefined){
@@ -647,7 +745,16 @@ export function registerAcademicRoutes(app, db) {
     const question=await (await db.query(`SELECT q.* FROM exam_questions q JOIN exams e ON e.id=q.exam_id
       WHERE q.id=? AND e.doctor_id=?`, [integer(req.params.id), req.user.id])).rows[0];
     if(!question) fail(404,'السؤال غير موجود');
-    if(await (await examOwned(question.exam_id,req.user.id)).status!=='draft') fail(409,'لا يمكن حذف سؤال بعد نشر الاختبار');
+    const exam=await examOwned(question.exam_id,req.user.id);
+    if(exam.status==='closed') fail(409,'لا يمكن حذف سؤال من اختبار مغلق');
+    if((await db.query(`SELECT 1 FROM exam_attempt_questions
+      WHERE question_id=? AND exam_id=? LIMIT 1`, [question.id,question.exam_id])).rows[0]) {
+      fail(409,'لا يمكن حذف سؤال استُخدم في محاولة طالب؛ حفاظًا على النتائج المسجلة');
+    }
+    const poolSize=(await db.query('SELECT COUNT(*) count FROM exam_questions WHERE exam_id=?', [exam.id])).rows[0].count;
+    if(exam.status==='published'&&poolSize<=exam.question_count) {
+      fail(409,'لا يمكن حذف السؤال لأن مخزون الاختبار سيصبح أقل من عدد الأسئلة المطلوبة');
+    }
     await db.query('DELETE FROM exam_questions WHERE id=? AND exam_id=?', [question.id, question.exam_id]);
     await audit(db,req.user,'حذف سؤال من مخزون اختبار','exam_question',question.id,{exam_id:question.exam_id});
     res.json({ok:true});

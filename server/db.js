@@ -65,7 +65,10 @@ function postgresStatement(statement) {
   const isInsert = /^\s*INSERT\s+INTO\b/i.test(sql);
   const insertMatch = sql.match(/^\s*INSERT\s+INTO\s+(?:"([^"]+)"|([a-z_][a-z\d_]*))/i);
   const insertTable = (insertMatch?.[1] || insertMatch?.[2])?.toLowerCase();
-  const hasIdPrimaryKey = !['auth_sessions', 'level_course_prices', 'schema_migrations'].includes(insertTable);
+  const hasIdPrimaryKey = ![
+    'auth_sessions', 'google_accounts', 'google_auth_states',
+    'level_course_prices', 'schema_migrations', 'user_permissions'
+  ].includes(insertTable);
   const hasReturning = /\bRETURNING\b/i.test(sql);
   const hasConflictClause = /\bON\s+CONFLICT\b/i.test(sql);
   if (ignoredConflict && !hasConflictClause) sql = `${sql.trimEnd()} ON CONFLICT DO NOTHING`;
@@ -115,6 +118,28 @@ export async function transaction(db, callback) {
     return result;
   } catch (error) {
     await client.query('ROLLBACK');
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export const SYSTEM_DATA_LOCK_ID = 1414743888;
+
+export async function withSystemDataLock(db, callback) {
+  const client = await db.pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('SELECT pg_advisory_xact_lock($1)', [SYSTEM_DATA_LOCK_ID]);
+    const result = await transactionContext.run(client, () => callback());
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    try {
+      await client.query('ROLLBACK');
+    } catch (rollbackError) {
+      console.error('Failed to release the system-data transaction lock:', rollbackError);
+    }
     throw error;
   } finally {
     client.release();

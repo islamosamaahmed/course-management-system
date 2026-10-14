@@ -1,20 +1,27 @@
 const appRoot = document.querySelector('#app');
 const toastRoot = document.querySelector('#toast-root');
 const globalLoadingScreen = document.querySelector('#global-loading-screen');
+async function renderInteractiveStudy(options) {
+  const { renderInteractiveStudyPage } = await import('./interactive-study.js');
+  return renderInteractiveStudyPage(options);
+}
 const themeStorageKey = 'course-theme';
 try {
   const savedTheme = localStorage.getItem(themeStorageKey);
-  if (savedTheme === 'dark' || savedTheme === 'light') document.documentElement.dataset.theme = savedTheme;
-  else document.documentElement.removeAttribute('data-theme');
+  document.documentElement.dataset.theme = savedTheme === 'dark' || savedTheme === 'light' ? savedTheme : 'dark';
 } catch {}
-const state = { user: null, csrf: '', today: '', route: 'dashboard', data: null, pendingBackupFile: null, examAttemptId: null, examAttempt: null, examAnswers: {}, examPendingAnswers: {}, examSaveTimer: null, examTimer: null, examIntegrityAttempt: null, examIntegrityEvents: [], examIntegrityRegistered: false, unreadNotifications: 0, notifications: [], followUpKind: 'more_than_half', followUpFilters: { q: '', level_id: '', group_id: '', absence_threshold: 25, page: 1 }, filters: { q: '', level_id: '', group_id: '', sort: 'name', page: 1 }, libraryFilters: { level_id: '', subject_id: '' }, scanner: null, scanLock: false, lastScan: '', lastScanAt: 0 };
+const state = { user: null, csrf: '', today: '', route: 'dashboard', data: null, pendingBackupFile: null, examAttemptId: null, examAttempt: null, examAnswers: {}, examPendingAnswers: {}, examSaveTimer: null, examTimer: null, examIntegrityAttempt: null, examIntegrityEvents: [], examIntegrityRegistered: false, unreadNotifications: 0, notifications: [], followUpKind: 'more_than_half', followUpFilters: { q: '', level_id: '', group_id: '', absence_threshold: 25, page: 1 }, filters: { q: '', level_id: '', group_id: '', sort: 'name', page: 1 }, libraryFilters: { level_id: '', subject_id: '' }, studyMode: 'catalog', studyLessonId: null, studyPosition: undefined, studyReviewQuestionId: null, studyReviewFeedback: null, studyReviewAnsweredQuestion: null, studyResult: null, studyEditLessonId: null, scanner: null, scanLock: false, lastScan: '', lastScanAt: 0 };
 window.__courseAppState = state;
-const roleTitle = { admin: 'إدارة النظام', doctor: 'الدكتور', assistant: 'دنيا · تشغيل الكورس', student: 'حساب الطالب' };
+const roleTitle = { admin: 'إدارة النظام', doctor: 'الدكتور', assistant: 'مساعد', student: 'حساب الطالب' };
+const normalizeRole = user => {
+  const raw = user?.accountType || user?.role || 'student';
+  return String(raw).toLowerCase();
+};
 const navItems = {
-  admin: [['dashboard', 'home', 'الرئيسية'], ['academic', 'book-open', 'المواد والاختبارات'], ['library', 'notebook', 'مكتبة المحاضرات'], ['follow-up', 'list-checks', 'متابعة الطلاب'], ['students', 'users-round', 'الطلاب'], ['sessions', 'calendar-days', 'المحاضرات'], ['reports', 'chart-column', 'التقارير'], ['backup', 'database', 'النسخ الاحتياطي'], ['audit', 'clipboard-list', 'سجل العمليات'], ['system-reset', 'triangle-alert', 'مسح البيانات']],
-  doctor: [['dashboard', 'home', 'الرئيسية'], ['academic', 'book-open', 'المواد والاختبارات'], ['library', 'notebook', 'مكتبة المحاضرات'], ['follow-up', 'list-checks', 'متابعة الطلاب'], ['students', 'users-round', 'الطلاب'], ['sessions', 'calendar-days', 'المحاضرات'], ['reports', 'chart-column', 'التقارير'], ['system-reset', 'triangle-alert', 'مسح البيانات']],
-  assistant: [['dashboard', 'home', 'الرئيسية'], ['follow-up', 'list-checks', 'متابعة الطلاب'], ['students', 'users-round', 'الطلاب'], ['sessions', 'calendar-days', 'المحاضرات'], ['reports', 'chart-column', 'التقارير'], ['settings', 'settings', 'الإعدادات'], ['users', 'users-round', 'الفرق'], ['system-reset', 'triangle-alert', 'مسح البيانات']],
-  student: [['dashboard', 'home', 'ملفي'], ['library', 'notebook', 'مكتبة المحاضرات'], ['notifications', 'bell', 'الإشعارات']]
+  admin: [['dashboard', 'home', 'لوحة التحكم'], ['students', 'users-round', 'الطلاب'], ['users', 'users-round', 'إدارة المستخدمين'], ['sessions', 'calendar-days', 'الحضور'], ['reports', 'chart-column', 'التقارير'], ['audit', 'clipboard-list', 'سجل العمليات'], ['study-manage', 'book-open', 'المذاكرة التفاعلية'], ['settings', 'settings', 'الإعدادات'], ['backup', 'database', 'نسخ احتياطي']],
+  doctor: [['dashboard', 'home', 'لوحة الدكتور'], ['academic', 'book-open', 'موادي ومحاضراتي'], ['library', 'notebook', 'مكتبتي'], ['study-manage', 'book-open', 'المذاكرة التفاعلية'], ['follow-up', 'list-checks', 'طلابي'], ['students', 'users-round', 'الطلاب المرتبطون'], ['sessions', 'calendar-days', 'محاضراتي'], ['reports', 'chart-column', 'تقاريري']],
+  assistant: [['dashboard', 'home', 'لوحة المساعد'], ['follow-up', 'list-checks', 'متابعة الطلاب'], ['students', 'users-round', 'الطلاب'], ['sessions', 'calendar-days', 'الحضور'], ['reports', 'chart-column', 'التقارير'], ['settings', 'settings', 'الإعدادات']],
+  student: [['dashboard', 'home', 'ملفي'], ['study', 'book-open', 'المذاكرة التفاعلية'], ['library', 'notebook', 'مكتبة المحاضرات'], ['notifications', 'bell', 'الإشعارات']]
 };
 const iconPaths = {
   home: '<path d="m3 10 9-7 9 7v10a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
@@ -42,16 +49,99 @@ const iconPaths = {
   'arrow-left': '<path d="m15 18-6-6 6-6"/>',
   'arrow-right': '<path d="m9 18 6-6-6-6"/>',
   close: '<path d="m18 6-12 12M6 6l12 12"/>'
+  ,search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.6-3.6"/>'
   ,database: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v7c0 1.7 3.6 3 8 3s8-1.3 8-3V5"/><path d="M4 12v7c0 1.7 3.6 3 8 3s8-1.3 8-3v-7"/>'
+  ,check: '<path d="m5 13 4 4L19 7"/>'
+  ,'shield-weak': '<path d="M12 3l7 3v5c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6z"/>'
+  ,'shield-medium': '<path d="M12 3l7 3v5c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6z"/><path d="m9.5 12 2 2 3.5-4"/>'
+  ,'shield-strong': '<path d="M12 3l7 3v5c0 5-3.5 8-7 9-3.5-1-7-4-7-9V6z"/><path d="m9 11.5 2.2 2.2L15.5 9"/>'
+  ,info: '<circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/>'
 };
 const iconSvg = name => `<svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">${iconPaths[name]}</svg>`;
 const passwordToggleMarkup = () => `<button class="password-toggle" type="button" data-action="toggle-password" aria-label="إظهار كلمة المرور" aria-pressed="false">${iconSvg('eye')}</button>`;
+const passwordStrengthMarkup = (minLength = 12) => `<div class="password-strength" data-level="weak"><div class="password-strength-top"><div class="password-strength-label"><span>قوة كلمة المرور</span><strong class="password-strength-value">ضعيفة</strong></div><span class="password-strength-icon">${iconSvg('shield-weak')}</span></div><div class="password-strength-bar" aria-hidden="true"><span class="password-strength-fill"></span></div><div class="password-strength-reqs"><div class="password-strength-req" data-req="length"><span class="password-strength-check">${iconSvg('check')}</span><span>${minLength} أحرف على الأقل</span></div><div class="password-strength-req" data-req="upper"><span class="password-strength-check">${iconSvg('check')}</span><span>حرف كبير (A-Z)</span></div><div class="password-strength-req" data-req="lower"><span class="password-strength-check">${iconSvg('check')}</span><span>حرف صغير (a-z)</span></div><div class="password-strength-req" data-req="digit"><span class="password-strength-check">${iconSvg('check')}</span><span>رقم (0-9)</span></div><div class="password-strength-req wide" data-req="special"><span class="password-strength-check">${iconSvg('check')}</span><span>رمز خاص (@ # $ ...)</span></div></div></div>`;
+function passwordStrengthChecks(value, minLength = 12) {
+  return {
+    length: (value || '').length >= minLength,
+    upper: /[A-Z]/.test(value || ''),
+    lower: /[a-z]/.test(value || ''),
+    digit: /[0-9]/.test(value || ''),
+    special: /[^A-Za-z0-9]/.test(value || '')
+  };
+}
+function updatePasswordStrength(input) {
+  const wrap = input.closest('.password-input-wrap');
+  const box = wrap?.nextElementSibling?.classList?.contains('password-strength')
+    ? wrap.nextElementSibling
+    : input.closest('.field')?.querySelector?.(':scope > .password-strength') ||
+      input.closest('#create-user-form')?.querySelector('.user-password-strength-field .password-strength');
+  if (!box) return;
+  const value = input.value || '';
+  const checks = passwordStrengthChecks(value, 12);
+  const score = Object.values(checks).filter(Boolean).length;
+  box.querySelectorAll('.password-strength-req').forEach(req => {
+    req.classList.toggle('valid', !!checks[req.dataset.req]);
+  });
+  const valueEl = box.querySelector('.password-strength-value');
+  const iconEl = box.querySelector('.password-strength-icon');
+  if (score <= 2) {
+    box.dataset.level = 'weak';
+    if (valueEl) valueEl.textContent = 'ضعيفة';
+    if (iconEl) iconEl.innerHTML = iconSvg('shield-weak');
+  } else if (score <= 4) {
+    box.dataset.level = 'medium';
+    if (valueEl) valueEl.textContent = 'متوسطة';
+    if (iconEl) iconEl.innerHTML = iconSvg('shield-medium');
+  } else {
+    box.dataset.level = 'strong';
+    if (valueEl) valueEl.textContent = 'قوية';
+    if (iconEl) iconEl.innerHTML = iconSvg('shield-strong');
+  }
+}
+document.addEventListener('input', event => {
+  const input = event.target?.closest?.('input[data-password-strength]');
+  if (input) updatePasswordStrength(input);
+});
+const logoutButtonMarkup = (className = '') => `<button class="btn ${className}" type="button" data-action="logout" aria-label="Log Out"><span class="btn-text">Log Out</span><svg class="door-frame" viewBox="0 0 100 100"><path d="M93.4 86.3H58.6c-1.9 0-3.4-1.5-3.4-3.4V17.1c0-1.9 1.5-3.4 3.4-3.4h34.8c1.9 0 3.4 1.5 3.4 3.4v65.8c0 1.9-1.5 3.4-3.4 3.4z" /><path class="flash" d="M40.5 43.7L26.6 31.4l-2.5 6.7zM41.9 50.4l-19.5-4-1.4 6.3zM40 57.4l-17.7 3.9 3.9 5.7z" /></svg><svg class="door" viewBox="0 0 100 100"><path d="M93.4 86.3H58.6c-1.9 0-3.4-1.5-3.4-3.4V17.1c0-1.9 1.5-3.4 3.4-3.4h34.8c1.9 0 3.4 1.5 3.4 3.4v65.8c0 1.9-1.5 3.4-3.4 3.4z" /><circle cx="66" cy="50" r="3.7" /></svg><svg class="person" viewBox="0 0 100 100"><circle cx="52.1" cy="32.4" r="6.4" /><path d="M50.7 62.8c-1.2 2.5-3.6 5-7.2 4-3.2-.9-4.9-3.5-4-7.8.7-3.4 3.1-13.8 4.1-15.8 1.7-3.4 1.6-4.6 7-3.7 4.3.7 4.6 2.5 4.3 5.4-.4 3.7-2.8 15.1-4.2 17.9z" /><g class="arm1"><path d="M55.5 56.5l-6-9.5c-1-1.5-.6-3.5.9-4.4 1.5-1 3.7-1.1 4.6.4l6.1 10c1 1.5.3 3.5-1.1 4.4-1.5.9-3.5.5-4.5-.9z" /><path d="M69.4 59.9L58.1 58c-1.7-.3-2.9-1.9-2.6-3.7.3-1.7 1.9-2.9 3.7-2.6l11.4 1.9c1.7.3 2.9 1.9 2.6 3.7-.4 1.7-2 2.9-3.8 2.6z" /></g><g class="arm2"><path d="M34.2 43.6L45 40.3c1.7-.6 3.5.3 4 2 .6 1.7-.3 4-2 4.5l-10.8 2.8c-1.7.6-3.5-.3-4-2-.6-1.6.3-3.4 2-4z" /><path d="M27.1 56.2L32 45.7c.7-1.6 2.6-2.3 4.2-1.6 1.6.7 2.3 2.6 1.6 4.2L33 58.8c-.7 1.6-2.6 2.3-4.2 1.6-1.7-.7-2.4-2.6-1.7-4.2z" /></g><g class="leg1"><path d="M52.1 73.2s-7-5.7-7.9-6.5c-.9-.9-1.2-3.5-.1-4.9 1.1-1.4 3.8-1.9 5.2-.9l7.9 7c1.4 1.1 1.7 3.5.7 4.9-1.1 1.4-4.4 1.5-5.8.4z" /><path d="M52.6 84.4l-1-12.8c-.1-1.9 1.5-3.6 3.5-3.7 2-.1 3.7 1.4 3.8 3.4l1 12.8c.1 1.9-1.5 3.6-3.5 3.7-2 0-3.7-1.5-3.8-3.4z" /></g><g class="leg2"><path d="M37.8 72.7s1.3-10.2 1.6-11.4 2.4-2.8 4.1-2.6c1.7.2 3.6 2.3 3.4 4l-1.8 11.1c-.2 1.7-1.7 3.3-3.4 3.1-1.8-.2-4.1-2.4-3.9-4.2z" /><path d="M29.5 82.3l9.6-10.9c1.3-1.4 3.6-1.5 5.1-.1 1.5 1.4.4 4.9-.9 6.3l-8.5 9.6c-1.3 1.4-3.6 1.5-5.1.1-1.4-1.3-1.5-3.5-.2-5z" /></g></svg></button>`;
+const deleteButtonSelector = 'button[data-structure-delete],button[data-library-delete],button[data-question-delete],button[data-delete-student]';
+function enhanceDeleteButton(button) {
+  if (button.dataset.deleteButtonEnhanced === 'true') return;
+  const label = document.createElement('span');
+  label.className = 'delete-button-label';
+  while (button.firstChild) label.append(button.firstChild);
+  const icon = document.createElement('span');
+  icon.className = 'delete-button-icon';
+  icon.setAttribute('aria-hidden', 'true');
+  icon.innerHTML = '<svg viewBox="0 0 24 24" focusable="false"><g class="delete-trash-lid"><path d="M9 5V3.8A1.8 1.8 0 0 1 10.8 2h2.4A1.8 1.8 0 0 1 15 3.8V5M4 6h16"/></g><path class="delete-trash-body" d="m6 7 1 13a2 2 0 0 0 2 1.8h6a2 2 0 0 0 2-1.8L18 7M10 10v8m4-8v8"/></svg>';
+  button.classList.add('delete-button');
+  button.append(icon, label);
+  button.dataset.deleteButtonEnhanced = 'true';
+}
+function enhanceDeleteButtons(root) {
+  if (root instanceof Element && root.matches(deleteButtonSelector)) enhanceDeleteButton(root);
+  root.querySelectorAll?.(deleteButtonSelector).forEach(enhanceDeleteButton);
+}
+enhanceDeleteButtons(document);
+new MutationObserver(records => {
+  for (const record of records) {
+    for (const node of record.addedNodes) {
+      if (node instanceof Element) enhanceDeleteButtons(node);
+    }
+  }
+}).observe(document.body, { childList: true, subtree: true });
+document.addEventListener('click', event => {
+  const button = event.target instanceof Element ? event.target.closest('.delete-button') : null;
+  if (!button || button.disabled) return;
+  button.classList.remove('is-animating');
+  void button.offsetWidth;
+  button.classList.add('is-animating');
+  window.setTimeout(() => button.classList.remove('is-animating'), 650);
+}, true);
 const welcomeMessages = {
   tamer: { name: 'أ.د. تامر النشار', message: 'دكتور تامر،\nعلمك وأسلوبك في الشرح خلاني أحب المجال ده.\nالموقع ده شكر بسيط مني على كل حاجة.\nربنا يبارك في حضرتك.' },
   tamer_nashar: { name: 'أ.د. تامر النشار', message: 'دكتور تامر،\nعلمك وأسلوبك في الشرح خلاني أحب المجال ده.\nالموقع ده شكر بسيط مني على كل حاجة.\nربنا يبارك في حضرتك.' },
   ahmed_rashad: { name: 'د. أحمد رشاد', message: 'دكتور أحمد،\nعلمك وأسلوبك في الشرح خلاني أحب المجال ده.\nالموقع ده شكر بسيط مني على كل حاجة.\nربنا يبارك في حضرتك.' },
   ahmed_alfy: { name: 'د. أحمد الألفي', message: 'دكتور أحمد،\nعلمك وأسلوبك في الشرح خلاني أحب المجال ده.\nالموقع ده شكر بسيط مني على كل حاجة.\nربنا يبارك في حضرتك.' },
-  donia: { name: 'أ. دنيا', message: 'أستاذة دنيا،\nمن أول يوم شفت تعبك وصبرك معانا،\nحسيت إن لازم أعملك حاجة تساعدك في شغلك.\nالموقع ده معمول مخصوص علشان يسهل عليك شغلك ويوفر وقتك ومجهودك.\nشكرًا على كل حاجة، وربنا يوفقك دايمًا.' }
 };
 const moneyLabel = cents => `${(Number(cents || 0) / 100).toLocaleString('ar-EG', { maximumFractionDigits: 2 })} ج`;
 const dateLabel = value => value ? new Date(`${value.slice(0, 10)}T12:00:00`).toLocaleDateString('ar-EG') : '—';
@@ -97,64 +187,6 @@ async function renderBackup() {
     document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop"><section class="modal"><div class="modal-head"><h2>تأكيد استعادة النسخة</h2>${iconButton('إغلاق')}</div><div class="notice error">سيتم استبدال كل البيانات الحالية وإنهاء الجلسات.</div><div class="form-actions"><button type="button" class="button secondary" data-action="close-modal">إلغاء</button><button type="button" class="button danger" data-action="confirm-backup-restore">استعادة كل البيانات</button></div></section></div>`);
   });
 }
-async function renderSystemReset() {
-  const { requests } = await api('/system-reset/requests');
-  const activeRequest = requests.some(request => ['pending', 'processing'].includes(request.status));
-  const statusLabels = {
-    pending: 'بانتظار موافقة دكتور',
-    processing: 'جاري المسح',
-    completed: 'اكتمل المسح',
-    failed: 'تعذر إكمال المسح',
-    cancelled: 'أُلغي الطلب'
-  };
-  const cards = requests.map(request => {
-    const canApprove = ['admin', 'doctor'].includes(state.user.role) && request.status === 'pending' && request.requester_id !== state.user.id;
-    const canCancel = request.status === 'pending' && request.requester_id === state.user.id;
-    return `<article class="exam-list-item"><div><strong>${esc(statusLabels[request.status] || request.status)}</strong><span>صاحب الطلب: ${esc(request.requester_name)} (${['admin', 'doctor'].includes(request.requester_role) ? 'دكتور' : 'مساعد'}) · ${datetimeLabel(request.created_at)}</span>${request.approver_name ? `<span>الدكتور الموافق: ${esc(request.approver_name)}</span>` : ''}${request.failure_reason ? `<p class="notice error">${esc(request.failure_reason)}</p>` : ''}</div><div class="filters">${canApprove ? `<button class="button danger" data-system-wipe-approve="${esc(request.id)}">موافقة وبدء المسح</button>` : ''}${canCancel ? `<button class="button secondary" data-system-wipe-cancel="${esc(request.id)}">إلغاء طلبي</button>` : ''}</div></article>`;
-  }).join('');
-  frame(`<section class="panel"><div class="panel-head"><div><h2>طلب مسح جميع البيانات</h2><p>يمكن للدكتور أو المساعد إرسال الطلب بعد تأكيد كلمة المرور، ويحتاج التنفيذ موافقة دكتور آخر.</p></div></div><div class="notice error">الموافقة تمسح بيانات الطلاب والمجموعات والمحاضرات والحضور والمدفوعات والاختبارات والشهادات والمكتبة والإعدادات، وتحذف ملفات المكتبة والنسخ الاحتياطية التلقائية. لن تُمسح حسابات الدكاترة والمساعدة، لكن سيتم إنهاء جلسات الدخول الحالية. لا يمكن التراجع عن ذلك.</div>${!activeRequest ? `<form id="system-wipe-request-form" class="form-grid" style="margin-top:18px"><div class="field wide"><label for="system-wipe-password">كلمة مرور حسابك للتأكيد</label><input id="system-wipe-password" name="password" type="password" autocomplete="current-password" minlength="12" maxlength="128" required></div><div class="form-actions wide"><button class="button danger" type="submit">إرسال طلب مسح جميع البيانات</button></div></form>` : '<div class="notice" style="margin-top:18px">يوجد طلب مفتوح بالفعل؛ لا يمكن إرسال طلب آخر قبل إتمامه أو إلغائه.</div>'}</section><section class="panel"><div class="panel-head"><div><h2>طلبات المسح والموافقات</h2><p>آخر 50 طلبًا</p></div></div><div class="notification-list">${cards || '<div class="empty"><strong>لا توجد طلبات مسح</strong>ستظهر هنا الطلبات والموافقات السابقة.</div>'}</div></section>`, 'مسح البيانات', 'مسح شامل يتطلب موافقة دكتور');
-  document.querySelector('#system-wipe-request-form')?.addEventListener('submit', sendSystemWipeRequest);
-}
-async function sendSystemWipeRequest(event) {
-  event.preventDefault();
-  const form = event.currentTarget, button = form.querySelector('[type="submit"]');
-  if (!confirm('سيُرسل طلبًا لمسح كل بيانات الموقع بعد موافقة دكتور آخر. هل تريد المتابعة؟')) return;
-  setBusy(button, true);
-  try {
-    await api('/system-reset/requests', { method: 'POST', body: JSON.stringify({ password: new FormData(form).get('password') }) });
-    toast('تم إرسال طلب المسح للدكاترة للموافقة');
-    await renderSystemReset();
-  } catch (error) {
-    toast(error.message, true);
-    setBusy(button, false);
-  }
-}
-async function approveSystemWipe(id, button) {
-  if (!confirm('سيبدأ فورًا مسح بيانات الطلاب والمجموعات والمحاضرات والحضور والمدفوعات والاختبارات والمكتبة والإعدادات. حسابات الدكاترة والمساعدة لن تُمسح، لكن ستنتهي جلسات الدخول الحالية. لن يمكن التراجع. هل توافق على التنفيذ؟')) return;
-  setBusy(button, true, 'جارٍ مسح البيانات...');
-  try {
-    await api(`/system-reset/requests/${encodeURIComponent(id)}/approve`, { method: 'POST', body: '{}' });
-    state.user = null;
-    state.csrf = '';
-    renderLogin('اكتمل مسح البيانات مع الاحتفاظ بحسابات الدكاترة والمساعدة. سجّل الدخول مجددًا بهذه الحسابات، ثم أعد إعداد الفرق والمجموعات المطلوبة.');
-  } catch (error) {
-    toast(error.message, true);
-    setBusy(button, false);
-    await renderSystemReset();
-  }
-}
-async function cancelSystemWipe(id, button) {
-  if (!confirm('هل تريد إلغاء طلب المسح؟')) return;
-  setBusy(button, true);
-  try {
-    await api(`/system-reset/requests/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: '{}' });
-    toast('تم إلغاء طلب المسح');
-    await renderSystemReset();
-  } catch (error) {
-    toast(error.message, true);
-    setBusy(button, false);
-  }
-}
 function themeToggleMarkup(extraClass = '') {
   const dark = activeTheme() === 'dark', label = dark ? 'التبديل إلى الوضع الفاتح' : 'التبديل إلى الوضع الداكن';
   return `<button class="theme-toggle ${extraClass}" type="button" data-action="toggle-theme" aria-label="${label}" title="${label}" aria-pressed="${dark}">${iconSvg(dark ? 'sun' : 'moon')}</button>`;
@@ -173,6 +205,29 @@ function toggleTheme() {
   syncThemeControls();
 }
 
+const sidebarStorageKey = 'stc-sidebar-collapsed';
+function sidebarIsCollapsed() {
+  try { return localStorage.getItem(sidebarStorageKey) === '1'; } catch { return false; }
+}
+function syncSidebarToggle() {
+  const collapsed = document.body.classList.contains('sidebar-collapsed');
+  const button = document.querySelector('.sidebar-toggle');
+  if (!button) return;
+  const label = collapsed ? 'فتح القائمة' : 'طي القائمة';
+  button.innerHTML = iconSvg(collapsed ? 'menu' : 'close');
+  button.setAttribute('aria-label', label);
+  button.title = label;
+  button.setAttribute('aria-expanded', String(!collapsed));
+}
+function toggleSidebar() {
+  const collapsed = !document.body.classList.contains('sidebar-collapsed');
+  document.body.classList.toggle('sidebar-collapsed', collapsed);
+  document.querySelector('.sidebar')?.classList.toggle('collapsed', collapsed);
+  try { localStorage.setItem(sidebarStorageKey, collapsed ? '1' : '0'); } catch {}
+  syncSidebarToggle();
+}
+try { if (sidebarIsCollapsed()) document.body.classList.add('sidebar-collapsed'); } catch {}
+
 async function api(path, options = {}) {
   const headers = { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...(options.headers || {}) };
   if (options.method && !['GET', 'HEAD'].includes(options.method)) headers['X-CSRF-Token'] = state.csrf;
@@ -190,6 +245,41 @@ async function api(path, options = {}) {
 function toast(message, bad = false) {
   toastRoot.innerHTML = `<div class="toast${bad ? ' bad' : ''}" role="${bad ? 'alert' : 'status'}" aria-live="${bad ? 'assertive' : 'polite'}">${esc(message)}</div>`;
   setTimeout(() => { toastRoot.innerHTML = ''; }, 3600);
+}
+function googleAccountContent(status) {
+  return `<div class="google-account-actions"><div class="google-account-status"><span class="google-account-indicator ${status.connected ? 'connected' : ''}"></span><div><strong>${status.connected ? 'حساب Google مرتبط' : 'غير مرتبط'}</strong>${status.connected ? `<small>${esc(status.email)}</small>` : '<small>اربط حسابك لتسجيل الدخول به لاحقًا</small>'}</div></div><button class="button ${status.connected ? 'danger' : 'secondary'}" data-action="${status.connected ? 'google-disconnect' : 'google-connect'}">${status.connected ? 'فصل حساب Google' : 'ربط حساب Google'}</button></div>`;
+}
+function googleAccountPanel(status) {
+  return `<section class="panel google-account-panel"><div class="panel-head"><div><h2>أمان الحساب</h2><p>حساب Google وسيلة إضافية للدخول إلى حسابك الحالي.</p></div></div><div class="google-account-row"><div><strong>حساب Google</strong><p>سيظل حسابك ورقمك ودورك الحالي كما هي.</p></div>${googleAccountContent(status)}</div></section>`;
+}
+async function manageGoogleAccount() {
+  try {
+    const status = await api('/auth/google/status');
+    document.querySelector('.google-account-modal')?.remove();
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop google-account-modal"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="google-account-title"><div class="modal-head"><h2 id="google-account-title">أمان الحساب · Google</h2>${iconButton('إغلاق')}</div><p class="muted">ربط Google يضيف طريقة دخول لحسابك الحالي ولا ينشئ حسابًا جديدًا.</p><div class="google-account-modal-actions">${googleAccountContent(status)}</div></section></div>`);
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+async function connectGoogleAccount() {
+  try {
+    const result = await api('/auth/google/link', { method: 'POST', body: '{}' });
+    if (typeof result.url !== 'string') throw new Error('تعذر بدء ربط حساب Google.');
+    location.assign(result.url);
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+async function disconnectGoogleAccount() {
+  if (!confirm('هل تريد فصل حساب Google؟ ستظل قادرًا على الدخول باسم المستخدم وكلمة المرور.')) return;
+  try {
+    await api('/auth/google/unlink', { method: 'POST', body: '{}' });
+    document.querySelector('.google-account-modal')?.remove();
+    toast('تم فصل حساب Google.');
+    await render();
+  } catch (error) {
+    toast(error.message, true);
+  }
 }
 document.addEventListener('invalid', event => {
   event.preventDefault();
@@ -216,8 +306,9 @@ function setBusy(button, busy, label = 'جارٍ التنفيذ...') {
   else { button.disabled = false; button.textContent = button.dataset.label || button.textContent; }
 }
 function renderLogin(message = '') {
-  appRoot.innerHTML = `<main class="login-page"><section class="login-hero"><div class="hero-top"><div class="hero-logo"><img src="/favicon.svg" alt="S.T.C"></div><div><strong>S.T.C</strong><small>مركز السويس للتدريب</small></div></div><div class="hero-mid"><h1>إدارة الكورس<br><span class="grad">بوضوح وسرعة.</span></h1><p>الحضور، بيانات الطلاب، والمدفوعات في مساحة واحدة منظّمة.</p><div class="hero-features"><span class="hero-chip"><span>⚡</span>سريع جدًا</span><span class="hero-chip"><span>🔒</span>آمن</span><span class="hero-chip"><span>📱</span>يعمل على كل الأجهزة</span></div></div><div class="hero-bottom"><span>إدارة تعليمية آمنة</span><span>توقيت القاهرة</span></div></section><section class="login-side"><form id="login-form"><h2 id="login-welcome">أهلاً بك</h2><p class="sub">سجّل الدخول لمتابعة الكورس.</p>${message ? `<div class="notice error">${esc(message)}</div>` : ''}<div class="input-group"><input id="username" name="username" type="text" placeholder=" " autocomplete="username" required autofocus><label for="username">اسم المستخدم</label></div><div class="input-group"><input id="password" type="password" data-password-input name="password" placeholder=" " autocomplete="current-password" required>${passwordToggleMarkup()}<label for="password">كلمة المرور</label></div><label class="remember-login"><input name="remember" type="checkbox"> تذكر بيانات الدخول على هذا الجهاز</label><button class="login-btn" type="submit">دخول</button><button class="button secondary install-app-button" type="button" hidden>تثبيت التطبيق</button></form></section></main>`;
+  appRoot.innerHTML = `<main class="login-page"><section class="login-hero"><div class="hero-top"><div class="hero-logo"><img src="/favicon.svg" alt="S.T.C"></div><div><strong>S.T.C</strong><small>مركز السويس للتدريب</small></div></div><div class="hero-mid"><h1>إدارة الكورس<br><span class="grad">بوضوح وسرعة.</span></h1><p>الحضور، بيانات الطلاب، والمدفوعات في مساحة واحدة منظّمة.</p><div class="hero-features"><span class="hero-chip"><span>⚡</span>سريع جدًا</span><span class="hero-chip"><span>🔒</span>آمن</span><span class="hero-chip"><span>📱</span>يعمل على كل الأجهزة</span></div></div><div class="hero-bottom"><span>إدارة تعليمية آمنة</span><span>توقيت القاهرة</span></div></section><section class="login-side"><form id="login-form"><h2 id="login-welcome">أهلاً بك</h2><p class="sub">سجّل الدخول لمتابعة الكورس.</p>${message ? `<div class="notice error">${esc(message)}</div>` : ''}<div class="input-group"><input id="username" name="username" type="text" placeholder=" " autocomplete="username" required autofocus><label for="username">اسم المستخدم</label></div><div class="input-group"><input id="password" type="password" data-password-input name="password" placeholder=" " autocomplete="current-password" required>${passwordToggleMarkup()}<label for="password">كلمة المرور</label></div><label class="remember-login"><input name="remember" type="checkbox"> تذكر بيانات الدخول على هذا الجهاز</label><button class="login-btn" type="submit">دخول</button><div class="login-divider">أو</div><button class="google-login-btn" id="google-login" type="button"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.07 13.22l7.98 6.19C11.95 13.72 17.48 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6C44.4 37.93 46.98 31.84 46.98 24.55z"/><path fill="#FBBC05" d="M10.05 28.59A14.4 14.4 0 0 1 9.27 24c0-1.59.27-3.13.76-4.59l-7.98-6.19A23.9 23.9 0 0 0 0 24c0 3.87.93 7.53 2.57 10.78l7.48-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.8l-7.73-6c-2.14 1.44-4.87 2.3-8.17 2.3-6.52 0-12.05-4.22-14.02-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg><span>المتابعة باستخدام Google</span></button><button class="button secondary install-app-button" type="button" hidden>تثبيت التطبيق</button></form></section></main>`;
   document.querySelector('#login-form').addEventListener('submit', login);
+  document.querySelector('#google-login').addEventListener('click', startGoogleLogin);
   document.querySelector('.login-side')?.insertAdjacentHTML('afterbegin', themeToggleMarkup());
   const usernameInput = document.querySelector('#username');
   usernameInput.addEventListener('input', () => updateLoginWelcome(usernameInput.value));
@@ -269,6 +360,10 @@ function togglePassword(button) {
   button.innerHTML = iconSvg(visible ? 'eye-off' : 'eye');
   button.setAttribute('aria-label', visible ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور');
   button.setAttribute('aria-pressed', String(visible));
+}
+function initializeAiChat() {
+  import('./ai-chat.js').then(module => module.initializeAiChat())
+    .catch(error => console.error('Failed to load AI Chat:', error));
 }
 function showWelcomeSplash(userId) {
   const user = state.user;
@@ -391,21 +486,61 @@ async function login(event) {
   try {
     const form = new FormData(event.currentTarget), result = await api('/login', { method: 'POST', body: JSON.stringify({ username: form.get('username'), password: form.get('password'), remember: form.get('remember') === 'on' }) });
     rememberLogin(form.get('username'));
-    state.user = result.user; state.csrf = result.csrf; const me = await api('/me'); state.today = me.today; state.route = 'dashboard'; showWelcomeSplash(state.user.id); await render();
+    state.user = result.user; state.csrf = result.csrf; const me = await api('/me'); state.today = me.today; state.route = 'dashboard'; showWelcomeSplash(state.user.id); await render(); initializeAiChat();
   } catch (error) { renderLogin(error.message); }
 }
+async function startGoogleLogin(event) {
+  const button = event.currentTarget;
+  setBusy(button, true, 'جارٍ الاتصال بـ Google...');
+  try {
+    const remember = document.querySelector('#login-form [name="remember"]').checked;
+    const response = await fetch('/auth/google/login', {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ remember })
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok || typeof result.url !== 'string') {
+      throw new Error(result.error || 'تعذر بدء تسجيل الدخول بواسطة Google.');
+    }
+    location.assign(result.url);
+  } catch (error) {
+    renderLogin(error.message);
+  }
+}
 function frame(content, title, subtitle = '') {
-  const items = navItems[state.user.role] || navItems.student;
-  const links = items.map(([id, icon, label]) => `<button class="${state.route === id ? 'active' : ''}" data-route="${id}"><span class="nav-icon">${iconSvg(icon)}</span>${label}</button>`).join('');
-  const mobileNames = { dashboard: state.user.role === 'assistant' ? 'الرئيسية' : state.user.role === 'student' ? 'ملفي' : 'الرئيسية', academic: 'مواد', library: 'المكتبة', 'follow-up': 'متابعة', notifications: 'إشعارات', students: 'الطلاب', sessions: 'محاضرات', reports: 'تقارير', backup: 'نسخ احتياطي', settings: 'إعدادات', users: 'حسابات', audit: 'السجل', 'system-reset': 'مسح بيانات' };
-  const mobile = items.map(([id, icon]) => `<button class="${state.route === id ? 'active' : ''}" data-route="${id}"><span>${iconSvg(icon)}</span>${mobileNames[id]}</button>`).join('');
-  const notificationButton = `${themeToggleMarkup()}${state.user.role === 'student' ? `<button class="notification-bell" data-action="open-notifications" aria-label="الإشعارات">${iconSvg('bell')}${state.unreadNotifications ? `<span class="notification-badge">${fmtCount(state.unreadNotifications)}</span>` : ''}</button>` : ''}`;
-  const mobileHeaderBell = state.user.role === 'student' ? `<button class="notification-bell mobile-header-bell" data-action="open-notifications" aria-label="الإشعارات">${iconSvg('bell')}${state.unreadNotifications ? `<span class="notification-badge">${fmtCount(state.unreadNotifications)}</span>` : ''}</button>` : '<span class="mobile-header-spacer" aria-hidden="true"></span>';
-  const drawerLinks = items.map(([id, icon, label]) => `<button class="mobile-drawer-link ${state.route === id ? 'active' : ''}" data-route="${id}"><span class="nav-icon">${iconSvg(icon)}</span>${label}</button>`).join('');
-  const passwordControls = ['admin', 'doctor'].includes(state.user.role) ? '' : '<button data-action="change-password">تغيير كلمة المرور</button>';
-  const mobileChrome = `<header class="mobile-header"><button class="mobile-menu-button" type="button" data-action="open-mobile-drawer" aria-label="فتح القائمة" aria-controls="mobile-drawer" aria-expanded="false">${iconSvg('menu')}</button><strong class="mobile-header-brand">S.T.C<span>مركز السويس للتدريب</span></strong>${mobileHeaderBell}</header><div class="mobile-drawer-backdrop" data-action="close-mobile-drawer" hidden></div><aside id="mobile-drawer" class="mobile-drawer" aria-label="قائمة الصفحات" aria-hidden="true" hidden><div class="mobile-drawer-head"><div>${iconSvg('graduation-cap')}<span class="mobile-drawer-brand"><strong>S.T.C</strong><small>مركز السويس للتدريب</small></span></div><button class="mobile-drawer-close" type="button" data-action="close-mobile-drawer" aria-label="إغلاق القائمة">${iconSvg('close')}</button></div><div class="mobile-drawer-user"><strong>${esc(state.user.name)}</strong><span>${roleTitle[state.user.role]}</span></div><nav class="mobile-drawer-nav">${drawerLinks}</nav><button class="mobile-drawer-logout" data-action="logout">تسجيل الخروج</button></aside>`;
-  appRoot.innerHTML = `<div class="layout">${mobileChrome}<aside class="sidebar"><div class="brand"><strong>S.T.C</strong><small>مركز السويس للتدريب</small></div><nav class="nav">${links}</nav><div class="side-bottom"><div class="user-line">${esc(state.user.name)}<small>${roleTitle[state.user.role]}</small></div>${passwordControls}<button data-action="logout">تسجيل الخروج</button></div></aside><main class="content"><header class="topbar"><div><span class="mobile-brand">S.T.C</span><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div><div class="top-actions">${notificationButton}${['admin', 'doctor'].includes(state.user.role) ? '' : '<button class="button secondary" data-action="change-password">تغيير كلمة المرور</button>'}<span class="tag">${dateLabel(state.today)}</span></div></header>${content}</main><nav class="mobile-nav" style="--nav-count:${items.length + 1}">${mobile}<button data-action="logout"><span>${iconSvg('log-out')}</span>خروج</button></nav></div>`;
+  const role = normalizeRole(state.user);
+  const items = navItems[role] || navItems.student;
+  const dividerIndexes = new Set([2, items.length - 2].filter(index => index > 0 && index < items.length - 1));
+  const linkDivider = index => dividerIndexes.has(index) ? '<div class="divider" aria-hidden="true"></div>' : '';
+  const links = items.map(([id, icon, label], index) => `${linkDivider(index)}<button class="${state.route === id ? 'active' : ''}" data-route="${id}" aria-label="${label}" title="${label}"><span class="nav-icon">${iconSvg(icon)}</span><span class="nav-label">${label}</span></button>`).join('');
+  const mobileNames = { dashboard: role === 'assistant' ? 'الرئيسية' : role === 'student' ? 'ملفي' : 'الرئيسية', academic: 'مواد', library: 'المكتبة', study: 'المذاكرة', 'study-manage': 'المذاكرة', 'follow-up': 'متابعة', notifications: 'إشعارات', students: 'الطلاب', sessions: 'محاضرات', reports: 'تقارير', backup: 'نسخ احتياطي', settings: 'إعدادات', users: 'حسابات', audit: 'السجل' };
+  const mobilePrimaryIds = {
+    admin: ['dashboard', 'students', 'users'],
+    doctor: ['dashboard', 'study-manage', 'academic'],
+    assistant: ['dashboard', 'follow-up', 'students'],
+    student: ['dashboard', 'study', 'library']
+  }[role] || ['dashboard'];
+  const mobileItems = mobilePrimaryIds.map(id => items.find(item => item[0] === id)).filter(Boolean);
+  const mobileRoutes = new Set(mobileItems.map(([id]) => id));
+  const hasMoreMobileRoutes = mobileItems.length < items.length;
+  const mobile = mobileItems.map(([id, icon]) => `<button class="${state.route === id ? 'active' : ''}" data-route="${id}"><span>${iconSvg(icon)}</span>${mobileNames[id]}</button>`).join('') +
+    (hasMoreMobileRoutes ? `<button class="mobile-more-button ${mobileRoutes.has(state.route) ? '' : 'active'}" type="button" data-action="open-mobile-drawer" aria-label="المزيد من الصفحات"><span>${iconSvg('menu')}</span>المزيد</button>` : '');
+  const notificationButton = `${themeToggleMarkup()}${role === 'student' ? `<button class="notification-bell" data-action="open-notifications" aria-label="الإشعارات">${iconSvg('bell')}${state.unreadNotifications ? `<span class="notification-badge">${fmtCount(state.unreadNotifications)}</span>` : ''}</button>` : ''}`;
+  const mobileHeaderBell = role === 'student' ? `<button class="notification-bell mobile-header-bell" data-action="open-notifications" aria-label="الإشعارات">${iconSvg('bell')}${state.unreadNotifications ? `<span class="notification-badge">${fmtCount(state.unreadNotifications)}</span>` : ''}</button>` : '<span class="mobile-header-spacer" aria-hidden="true"></span>';
+  const drawerLinks = items.map(([id, icon, label], index) => `${linkDivider(index)}<button class="mobile-drawer-link ${state.route === id ? 'active' : ''}" data-route="${id}"><span class="nav-icon">${iconSvg(icon)}</span><span class="nav-label">${label}</span></button>`).join('');
+  const passwordControls = ['admin', 'doctor'].includes(role) ? '' : '<button data-action="change-password">تغيير كلمة المرور</button>';
+  const googleAccountControl = role === 'student' ? '' : '<button data-action="manage-google-account">حساب Google</button>';
+  const mobileGoogleAccountControl = role === 'student' ? '' : '<button class="mobile-drawer-account-action" data-action="manage-google-account">حساب Google</button>';
+  const mobilePasswordControl = ['admin', 'doctor'].includes(role) ? '' : '<button class="mobile-drawer-account-action" data-action="change-password">تغيير كلمة المرور</button>';
+  const roleLabel = role === 'assistant' ? `${esc(state.user.name)} · مساعد` : roleTitle[role] || roleTitle.student;
+  const mobileChrome = `<header class="mobile-header"><button class="mobile-menu-button" type="button" data-action="open-mobile-drawer" aria-label="فتح القائمة" aria-controls="mobile-drawer" aria-expanded="false">${iconSvg('menu')}</button><strong class="mobile-header-brand">S.T.C<span>مركز السويس للتدريب</span></strong>${mobileHeaderBell}</header><div class="mobile-drawer-backdrop" data-action="close-mobile-drawer" hidden></div><aside id="mobile-drawer" class="mobile-drawer" aria-label="قائمة الصفحات" aria-hidden="true" hidden><div class="mobile-drawer-head"><div>${iconSvg('graduation-cap')}<span class="mobile-drawer-brand"><strong>S.T.C</strong><small>مركز السويس للتدريب</small></span></div><button class="mobile-drawer-close" type="button" data-action="close-mobile-drawer" aria-label="إغلاق القائمة">${iconSvg('close')}</button></div><div class="mobile-drawer-user"><strong>${esc(state.user.name)}</strong><span>${roleLabel}</span></div><nav class="mobile-drawer-nav">${drawerLinks}</nav>${mobileGoogleAccountControl}${mobilePasswordControl}${logoutButtonMarkup('mobile-drawer-logout')}</aside>`;
+  const mobileNavCount = mobileItems.length + Number(hasMoreMobileRoutes);
+  appRoot.innerHTML = `<div class="layout">${mobileChrome}<aside class="sidebar"><div class="brand"><div class="brand-text"><strong>S.T.C</strong><small>مركز السويس للتدريب</small></div><button class="sidebar-toggle" type="button" data-action="toggle-sidebar"></button></div><div class="sidebar-search">${iconSvg('search')}<input type="search" placeholder="بحث في القائمة" aria-label="بحث في القائمة" autocomplete="off"></div><nav class="nav">${links}</nav><div class="side-bottom"><div class="user-line">${esc(state.user.name)}<small>${roleLabel}</small></div>${googleAccountControl}${passwordControls}</div></aside><main class="content"><header class="topbar"><div><span class="mobile-brand">S.T.C</span><h1>${esc(title)}</h1><p>${esc(subtitle)}</p></div><div class="top-actions">${notificationButton}${['admin', 'doctor'].includes(role) ? '' : '<button class="button secondary" data-action="change-password">تغيير كلمة المرور</button>'}${logoutButtonMarkup('topbar-logout')}<span class="tag">${dateLabel(state.today)}</span></div></header>${content}</main><nav class="mobile-nav" style="--nav-count:${mobileNavCount}">${mobile}</nav></div>`;
   appRoot.querySelectorAll('form').forEach(setupDateTimePickers);
+  document.querySelector('.sidebar')?.classList.toggle('collapsed', document.body.classList.contains('sidebar-collapsed'));
+  syncSidebarToggle();
   appRoot.querySelectorAll('.pagination button').forEach(button => {
     const previous = ['page', 'followUpPage', 'resultsPage'].some(key => button.dataset[key] === '-1');
     button.insertAdjacentHTML('afterbegin', iconSvg(previous ? 'arrow-right' : 'arrow-left'));
@@ -417,45 +552,79 @@ async function render() {
     await stopScanner();
     const sharedResource = sharedResourcePath();
     if (sharedResource?.type === 'library') {
-      if (['admin', 'doctor', 'student'].includes(state.user.role)) {
+      if (['admin', 'doctor', 'student'].includes(normalizeRole(state.user))) {
         location.assign(`/api/library/share/${encodeURIComponent(sharedResource.id)}/file`);
         return;
       }
       history.replaceState(null, '', '/');
     }
-    if (state.user.role === 'student') {
-      if (state.route === 'notifications') return await renderNotificationInbox();
-      if (state.route === 'library') return await renderLibrary();
-      if (state.route === 'exam-attempt') return await renderExamAttempt();
-      if (state.route === 'exam-review') return await renderExamReview();
-      return await renderStudent();
-    }
-    if (state.route === 'academic' && ['admin', 'doctor'].includes(state.user.role)) return await renderAcademic();
-    if (state.route === 'library' && ['admin', 'doctor'].includes(state.user.role)) return await renderLibrary();
-    if (state.route === 'backup' && state.user.role === 'admin') return await renderBackup();
-    if (state.route === 'users' && state.user.role === 'assistant') return await renderUsers();
-    if (state.route === 'system-reset') return await renderSystemReset();
-    if (state.route === 'dashboard') return await renderDashboard();
-    if (state.route === 'follow-up') return await renderFollowUp();
-    if (state.route === 'students') return await renderStudents();
-    if (state.route === 'sessions') return await renderSessions();
-    if (state.route === 'reports') return renderReports();
-    if (state.route === 'settings' && state.user.role === 'assistant') return await renderSettings();
-    if (state.route === 'audit' && state.user.role === 'admin') return await renderAudit();
-    state.route = 'dashboard'; return render();
+    const role = normalizeRole(state.user);
+    const routeRenderers = {
+      admin: async () => {
+        if (state.route === 'study-manage') return await renderInteractiveStudy({ api, frame, esc, toast, state });
+        if (state.route === 'dashboard') return await renderAdminDashboard();
+        if (state.route === 'students') return await renderStudents();
+        if (state.route === 'users') return await renderUsers();
+        if (state.route === 'sessions') return await renderSessions();
+        if (state.route === 'reports') return renderReports();
+        if (state.route === 'audit') return await renderAudit();
+        if (state.route === 'settings') return await renderSettings();
+        if (state.route === 'academic') return await renderAcademic();
+        if (state.route === 'library') return await renderLibrary();
+        if (state.route === 'backup') return await renderBackup();
+        if (state.route === 'follow-up') return await renderFollowUp();
+        state.route = 'dashboard'; return render();
+      },
+      doctor: async () => {
+        if (state.route === 'study-manage') return await renderInteractiveStudy({ api, frame, esc, toast, state });
+        if (state.route === 'dashboard') return await renderDoctorDashboard();
+        if (state.route === 'academic') return await renderAcademic();
+        if (state.route === 'library') return await renderLibrary();
+        if (state.route === 'follow-up') return await renderFollowUp();
+        if (state.route === 'students') return await renderStudents();
+        if (state.route === 'sessions') return await renderSessions();
+        if (state.route === 'reports') return renderReports();
+        state.route = 'dashboard'; return render();
+      },
+      assistant: async () => {
+        if (state.route === 'dashboard') return await renderDashboard();
+        if (state.route === 'follow-up') return await renderFollowUp();
+        if (state.route === 'students') return await renderStudents();
+        if (state.route === 'sessions') return await renderSessions();
+        if (state.route === 'reports') return renderReports();
+        if (state.route === 'settings') return await renderSettings();
+        state.route = 'dashboard'; return render();
+      },
+      student: async () => {
+        if (state.route === 'study') return await renderInteractiveStudy({ api, frame, esc, toast, state });
+        if (state.route === 'notifications') return await renderNotificationInbox();
+        if (state.route === 'library') return await renderLibrary();
+        if (state.route === 'exam-attempt') return await renderExamAttempt();
+        if (state.route === 'exam-review') return await renderExamReview();
+        return await renderStudent();
+      }
+    };
+    return await (routeRenderers[role] || routeRenderers.student)();
   } catch (error) { frame(`<section class="panel"><div class="notice error">${esc(error.message)}</div><button class="button secondary" data-action="refresh" style="margin-top:14px">إعادة المحاولة</button></section>`, 'تعذر تحميل البيانات'); }
 }
 async function renderDashboard() {
+  const role = normalizeRole(state.user);
+  if (role === 'admin') return renderAdminDashboard();
+  if (role === 'doctor') return renderDoctorDashboard();
+  if (role === 'assistant') return renderAssistant();
+  return renderStudent();
+}
+async function renderAdminDashboard() {
   const data = await api('/dashboard'); state.data = data;
-  if (state.user.role === 'assistant') return renderAssistant(data);
   const stats = [['إجمالي الحجوزات', data.booking.total], ['لم يدفعوا', data.booking.unpaid], ['دفع جزئي', data.booking.partial], ['دفع كامل', data.booking.confirmed], ['إجمالي المدفوع', moneyLabel(data.booking.paid)], ['إجمالي المتبقي', moneyLabel(data.booking.remaining)]];
   if (data.phase.course_started) stats.splice(1, 0, ['حضور اليوم', data.present], ['غياب اليوم', data.absent]);
   const rows = data.levels.map(level => `<article class="level-row"><h3>${esc(level.name)}</h3><div class="level-metrics"><span>الطلاب<b>${fmtCount(level.bookings)}</b></span>${data.phase.course_started ? `<span>الحضور<b>${fmtCount(level.present)}</b></span><span>الغياب<b>${fmtCount(level.absent)}</b></span>` : ''}<span>المدفوع<b>${moneyLabel(level.paid)}</b></span><span>المتبقي<b>${moneyLabel(level.remaining)}</b></span></div><div class="filters">${level.groups.map(group => `<button class="button secondary" data-group="${group.id}">${esc(group.name)}: ${fmtCount(group.bookings)}</button>`).join('')}</div></article>`).join('');
   const followUp = data.follow_up;
   const followUpWidget = `<section class="panel"><div class="panel-head"><div><h2>يحتاجون متابعة</h2><p>ملخص من سجلات الطلاب والحضور والمدفوعات.</p></div><button class="button secondary" data-route="follow-up">فتح المتابعة</button></div><div class="grid follow-up-cards">${followUpCards(followUp).map(card => `<button class="follow-up-card" data-follow-up-kind="${card.id}"><span>${iconSvg(card.icon)} ${card.label}</span><strong>${fmtCount(followUp[card.count])}</strong><small>${card.description}</small></button>`).join('')}</div></section>`;
-  const backupPanel = '';
+  const adminLinks = [['students', 'الطلاب'], ['users', 'إدارة المستخدمين'], ['sessions', 'إدارة الحضور والمحاضرات'], ['reports', 'التقارير'], ['audit', 'سجل العمليات'], ['settings', 'إعدادات النظام']];
+  const management = `<section class="panel"><div class="panel-head"><div><h2>الإدارة</h2><p>إدارة النظام ومتابعة عملياته.</p></div></div><div class="filters">${adminLinks.map(([route, label]) => `<button class="button secondary" data-route="${route}">${label}</button>`).join('')}</div></section>`;
   const phaseNotice = data.phase.course_started ? `<div class="notice">${iconSvg('graduation-cap')} الكورس بدأ · المحاضرات والحضور مفعّلان</div>` : `<div class="notice">${data.phase.booking_open ? `${iconSvg('book-open')} الحجز مفتوح` : 'الحجز مغلق'} · المحاضرات لم تبدأ بعد</div>`;
-  frame(`${phaseNotice}<section class="grid stats">${stats.map(([label, value]) => `<article class="stat"><span>${label}</span><strong>${typeof value === 'number' ? fmtCount(value) : value}</strong></article>`).join('')}</section>${followUpWidget}${backupPanel}<section class="panel"><div class="panel-head"><div><h2>ملخص الفرق والمجموعات</h2><p>ملخص الحجوزات والدفعات من قاعدة البيانات.</p></div></div><div class="grid level-grid">${rows}</div></section>`, 'لوحة الكورس', state.user.role === 'admin' ? 'عرض ومتابعة دون صلاحيات تشغيلية' : 'الحجوزات والمدفوعات والمرحلة الحالية');
+  frame(`${phaseNotice}<section class="grid stats">${stats.map(([label, value]) => `<article class="stat"><span>${label}</span><strong>${typeof value === 'number' ? fmtCount(value) : value}</strong></article>`).join('')}</section>${management}${followUpWidget}<section class="panel"><div class="panel-head"><div><h2>ملخص الفرق والمجموعات</h2><p>ملخص الحجوزات والدفعات من قاعدة البيانات.</p></div></div><div class="grid level-grid">${rows}</div></section>`, 'لوحة الإدارة', 'نظرة إدارية شاملة على الكورس والحسابات والعمليات');
   const restoreForm = document.querySelector('#database-restore-form');
   if (restoreForm) restoreForm.addEventListener('submit', event => {
     event.preventDefault();
@@ -464,6 +633,12 @@ async function renderDashboard() {
     state.pendingBackupFile = file;
     document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop" data-dismiss><section class="modal" role="dialog" aria-modal="true" aria-labelledby="restore-backup-title"><div class="modal-head"><h2 id="restore-backup-title">تأكيد استعادة النسخة</h2>${iconButton('إغلاق')}</div><div class="notice error">سيتم استبدال كل بيانات الموقع الحالية بالبيانات الموجودة في النسخة، وسيتم إنهاء جميع الجلسات. لا يمكن التراجع إلا باستعادة نسخة أخرى.</div><p class="muted" style="margin-top:12px">الملف المحدد: ${esc(file.name)}</p><div class="form-actions"><button type="button" class="button secondary" data-action="close-modal">إلغاء</button><button type="button" class="button danger" data-action="confirm-backup-restore">استعادة كل البيانات</button></div></section></div>`);
   });
+}
+async function renderDoctorDashboard() {
+  const data = await api('/academic/dashboard');
+  const stats = [['موادي', data.subjects], ['محاضراتي', data.lectures], ['اختباراتي', data.exams], ['طلاب أدّوا الاختبارات', data.students_completed], ['طلاب لم يؤدوا الاختبارات', data.students_not_taken]];
+  const links = [['academic', 'إدارة موادي ومحاضراتي واختباراتي'], ['students', 'الطلاب المرتبطون'], ['library', 'مكتبتي'], ['reports', 'تقاريري']];
+  frame(`<section class="grid stats">${stats.map(([label, value]) => `<article class="stat"><span>${label}</span><strong>${fmtCount(value)}</strong></article>`).join('')}</section><section class="panel"><div class="panel-head"><div><h2>مساحة الدكتور</h2><p>ملخص المحتوى الأكاديمي والطلاب المرتبطين بحسابك فقط.</p></div></div><div class="filters">${links.map(([route, label]) => `<button class="button secondary" data-route="${route}">${label}</button>`).join('')}</div></section>`, 'لوحة الدكتور', 'موادي ومحاضراتي وامتحاناتي ونتائجي');
 }
 async function restoreDatabaseBackup() {
   const file = state.pendingBackupFile, button = document.querySelector('[data-action="confirm-backup-restore"]');
@@ -484,7 +659,7 @@ async function renderAssistant(data) {
   const stats = [['إجمالي الحجوزات', data.booking.total], ['لم يدفعوا', data.booking.unpaid], ['دفع جزئي', data.booking.partial], ['دفع كامل', data.booking.confirmed], ['إجمالي المدفوع', moneyLabel(data.booking.paid)], ['إجمالي المتبقي', moneyLabel(data.booking.remaining)]];
   if (data.phase.course_started) stats.splice(1, 0, ['حضور اليوم', data.present], ['غياب اليوم', data.absent]);
   const current = data.phase.course_started ? `<section class="panel"><div class="panel-head"><h2>المحاضرة الحالية</h2></div>${data.current_sessions.length ? data.current_sessions.map(session => `<div class="notice">${esc(session.level_name)} · ${esc(session.group_name)} · ${esc(session.title)} · ${timeLabel(session.start_time)}${session.end_time ? `–${timeLabel(session.end_time)}` : ''}</div>`).join('') : '<div class="empty">لا توجد محاضرة جارية الآن.</div>'}</section>` : '';
-  frame(`<div class="notice">${data.phase.course_started ? `${iconSvg('graduation-cap')} الكورس بدأ` : `${data.phase.booking_open ? `${iconSvg('book-open')} الحجز مفتوح` : 'الحجز مغلق'} — المحاضرات لم تبدأ بعد`}</div><section class="grid stats">${stats.map(([label, value]) => `<article class="stat"><span>${label}</span><strong>${typeof value === 'number' ? fmtCount(value) : value}</strong></article>`).join('')}</section>${current}<section class="grid assistant-grid"><article class="panel scan-box">${scan}<div class="field" style="text-align:right;margin-top:20px"><label for="lookup-code">البحث بكود الطالب</label><div style="display:flex;gap:8px"><input id="lookup-code" inputmode="text" placeholder="مثال: 3157"><button class="button" data-action="lookup">بحث</button></div></div><div class="filters"><button class="button" data-action="new-student" ${data.phase.booking_open ? '' : 'disabled'}>إضافة حجز</button><button class="button secondary" data-route="follow-up">متابعة الطلاب</button></div></article><article id="assistant-result"></article></section><section class="panel"><div class="panel-head"><div><h2>حالة الكورس</h2><p>${data.phase.course_started ? 'إدارة المحاضرات وتسجيل الحضور متاحان.' : 'تسجيل الحجوزات والدفعات متاح. الحضور والغياب غير مفعّلين.'}</p></div><button class="button secondary" data-route="sessions">إدارة المحاضرات</button></div></section>`, 'لوحة دنيا', 'تشغيل الحجز والمدفوعات والمحاضرات');
+  frame(`<div class="notice">${data.phase.course_started ? `${iconSvg('graduation-cap')} الكورس بدأ` : `${data.phase.booking_open ? `${iconSvg('book-open')} الحجز مفتوح` : 'الحجز مغلق'} — المحاضرات لم تبدأ بعد`}</div><section class="grid stats">${stats.map(([label, value]) => `<article class="stat"><span>${label}</span><strong>${typeof value === 'number' ? fmtCount(value) : value}</strong></article>`).join('')}</section>${current}<section class="grid assistant-grid"><article class="panel scan-box">${scan}<div class="field" style="text-align:right;margin-top:20px"><label for="lookup-code">البحث بكود الطالب</label><div style="display:flex;gap:8px"><input id="lookup-code" inputmode="text" placeholder="مثال: 3157"><button class="button" data-action="lookup">بحث</button></div></div><div class="filters"><button class="button" data-action="new-student" ${data.phase.booking_open ? '' : 'disabled'}>إضافة حجز</button><button class="button secondary" data-route="follow-up">متابعة الطلاب</button></div></article><article id="assistant-result"></article></section><section class="panel"><div class="panel-head"><div><h2>حالة الكورس</h2><p>${data.phase.course_started ? 'إدارة المحاضرات وتسجيل الحضور متاحان.' : 'تسجيل الحجوزات والدفعات متاح. الحضور والغياب غير مفعّلين.'}</p></div><button class="button secondary" data-route="sessions">إدارة المحاضرات</button></div></section>`, `لوحة ${state.user.name}`, 'تشغيل الحجز والمدفوعات والمحاضرات');
   if (data.phase.course_started) {
     const statusNotice = document.querySelector('.content > .notice');
     if (statusNotice) statusNotice.innerHTML = `${iconSvg('graduation-cap')} الحضور متاح الآن`;
@@ -518,8 +693,11 @@ async function renderFollowUp() {
   const params = new URLSearchParams({ page: state.followUpFilters.page, size: 20 });
   for (const [key, value] of Object.entries(state.followUpFilters)) if (value) params.set(key, value);
   const [meta, data] = await Promise.all([api('/meta'), api(`/follow-up?${params}`)]);
+  const isDoctor = state.user.role === 'doctor';
+  const cardsAvailable = followUpCards(data.counts).filter(card => !isDoctor || ['high_absence', 'missed_last_two'].includes(card.id));
+  if (isDoctor && !cardsAvailable.some(card => card.id === state.followUpKind)) state.followUpKind = 'high_absence';
   const kind = state.followUpKind, list = data.lists[kind] || [];
-  const heading = followUpCards(data.counts).find(card => card.id === kind);
+  const heading = cardsAvailable.find(card => card.id === kind);
   let columns = '', rows = '';
   if (kind === 'high_absence') {
     columns = '<th>الاسم</th><th>الكود</th><th>الفرقة</th><th>المجموعة</th><th>أيام الحضور</th><th>أيام الغياب</th><th>نسبة الحضور</th><th>نسبة الغياب</th>';
@@ -532,10 +710,11 @@ async function renderFollowUp() {
     rows = list.map(s => `<tr><td>${esc(s.name)}</td><td>${esc(s.code)}</td><td>${esc(s.level_name)}</td><td>${esc(s.group_name)}</td><td>${moneyLabel(s.course_price_snapshot)}</td>${kind === 'more_than_half' ? `<td>${moneyLabel(s.paid)}</td>` : ''}<td>${moneyLabel(s.remaining)}</td><td><div class="reminder-history">${reminderStatus(s)}</div></td>${state.user.role === 'assistant' ? `<td><button class="button secondary" data-reminder-student="${s.id}">${iconSvg('bell')} تذكير بالدفع</button></td>` : ''}</tr>`).join('');
   }
   const filters = `<div class="filters follow-up-filters"><input class="search-input" id="follow-up-search" value="${esc(state.followUpFilters.q)}" placeholder="ابحث بالاسم أو الكود"><select id="follow-up-level"><option value="">كل الفرق</option>${meta.levels.map(level => `<option value="${level.id}" ${String(level.id) === String(state.followUpFilters.level_id) ? 'selected' : ''}>${esc(level.name)}</option>`).join('')}</select><select id="follow-up-group"><option value="">كل المجموعات</option>${meta.groups.map(group => `<option value="${group.id}" ${String(group.id) === String(state.followUpFilters.group_id) ? 'selected' : ''}>${esc(meta.levels.find(level => level.id === group.level_id)?.name)} · ${esc(group.name)}</option>`).join('')}</select><label class="threshold-field">حد الغياب<select id="absence-threshold">${[10, 20, 25, 30, 40, 50].map(value => `<option value="${value}" ${Number(data.threshold) === value ? 'selected' : ''}>${value}% فأكثر</option>`).join('')}</select></label></div>`;
-  const cards = `<div class="grid follow-up-cards">${followUpCards(data.counts).map(card => `<button class="follow-up-card ${kind === card.id ? 'selected' : ''}" data-follow-up-kind="${card.id}"><span>${iconSvg(card.icon)} ${card.label}</span><strong>${fmtCount(data.counts[card.count])}</strong></button>`).join('')}</div>`;
+  const cards = `<div class="grid follow-up-cards">${cardsAvailable.map(card => `<button class="follow-up-card ${kind === card.id ? 'selected' : ''}" data-follow-up-kind="${card.id}"><span>${iconSvg(card.icon)} ${card.label}</span><strong>${fmtCount(data.counts[card.count])}</strong></button>`).join('')}</div>`;
   const total = data.list_totals[kind] || 0, pages = Math.max(1, Math.ceil(total / data.size));
   const pagination = total > data.size ? `<div class="pagination"><button class="button secondary" data-follow-up-page="-1" ${data.page <= 1 ? 'disabled' : ''}>السابق</button><span>${fmtCount(data.page)} / ${fmtCount(pages)}</span><button class="button secondary" data-follow-up-page="1" ${data.page >= pages ? 'disabled' : ''}>التالي</button></div>` : '';
-  frame(`<section class="panel">${cards}${filters}<div class="panel-head"><div><h2>${heading.label}</h2><p>${kind === 'high_absence' ? `نسبة الغياب ${data.threshold}% فأكثر · ${fmtCount(total)} طالب` : `${fmtCount(total)} طالب`}</p></div></div>${rows ? `<div class="table-scroll"><table><thead><tr>${columns}</tr></thead><tbody>${rows}</tbody></table></div>` : '<div class="empty"><strong>لا توجد نتائج مطابقة</strong>تتحدث القوائم تلقائيًا عند تغير الحضور أو المدفوعات.</div>'}${pagination}</section>`, 'متابعة الطلاب', 'قوائم متابعة محسوبة من بيانات الكورس');
+  const emptyMessage = isDoctor ? 'تظهر هنا النتائج بعد تسجيل حضور المحاضرات المرتبطة.' : 'تتحدث القوائم تلقائيًا عند تغير الحضور أو المدفوعات.';
+  frame(`<section class="panel">${cards}${filters}<div class="panel-head"><div><h2>${heading.label}</h2><p>${kind === 'high_absence' ? `نسبة الغياب ${data.threshold}% فأكثر · ${fmtCount(total)} طالب` : `${fmtCount(total)} طالب`}</p></div></div>${rows ? `<div class="table-scroll"><table><thead><tr>${columns}</tr></thead><tbody>${rows}</tbody></table></div>` : `<div class="empty"><strong>لا توجد نتائج مطابقة</strong>${emptyMessage}</div>`}${pagination}</section>`, 'متابعة الطلاب', isDoctor ? 'متابعة الحضور للطلاب المرتبطين بموادك ومحاضراتك فقط' : 'قوائم متابعة محسوبة من بيانات الكورس');
   const groupSelect = document.querySelector('#follow-up-group');
   [...groupSelect.options].forEach(option => {
     if (!option.value) return;
@@ -660,9 +839,9 @@ function setupDateTimePickers(form) {
 async function renderSessions() {
   const [meta, sessions, sessionOptions] = await Promise.all([api('/meta'), api('/sessions'), api('/session-options')]);
   state.sessions = sessions;
-  const form = state.user.role === 'assistant' ? `<form id="session-form" class="form-grid session-schedule-form"><div class="field"><label>الفرقة</label><select name="level_id" required><option value="">اختر الفرقة</option>${meta.levels.map(level => `<option value="${level.id}">${esc(level.name)}</option>`).join('')}</select></div><div class="field"><label>المجموعة</label><select name="group_id" required disabled><option value="">اختر الفرقة أولًا</option></select></div><div class="field"><label>الدكتور</label><select name="doctor_id" required ${sessionOptions.doctors.length ? '' : 'disabled'}><option value="">${sessionOptions.doctors.length ? 'اختر الدكتور' : 'لا توجد حسابات دكاترة نشطة'}</option>${sessionOptions.doctors.map(doctor => `<option value="${doctor.id}">${esc(doctor.name)}</option>`).join('')}</select></div><div class="field"><label>المادة</label><select name="subject_id" required disabled><option value="">اختر المجموعة والدكتور أولًا</option></select><small class="field-hint" data-session-subject-help>اختر الفرقة والمجموعة والدكتور لعرض المواد المتاحة.</small></div><div class="field"><label>التاريخ</label><input name="date" type="date" required value="${esc(state.today)}" placeholder="اختر التاريخ"></div><div class="field"><label>وقت البداية</label><input name="start_time" type="time" required placeholder="اختر وقت البداية"></div><div class="field"><label>وقت النهاية</label><input name="end_time" type="time" required placeholder="اختر وقت النهاية"></div><div class="field wide"><label>عنوان المحاضرة</label><input name="title" required value="محاضرة الكورس"></div><div class="wide"><button class="button">إضافة محاضرة</button></div></form>` : '<div class="notice">عرض فقط. إدارة المواعيد متاحة لدنيا.</div>';
+  const form = state.user.role === 'assistant' ? `<form id="session-form" class="form-grid session-schedule-form"><div class="field"><label>الفرقة</label><select name="level_id" required><option value="">اختر الفرقة</option>${meta.levels.map(level => `<option value="${level.id}">${esc(level.name)}</option>`).join('')}</select></div><div class="field"><label>المجموعة</label><select name="group_id" required disabled><option value="">اختر الفرقة أولًا</option></select></div><div class="field"><label>الدكتور</label><select name="doctor_id" required ${sessionOptions.doctors.length ? '' : 'disabled'}><option value="">${sessionOptions.doctors.length ? 'اختر الدكتور' : 'لا توجد حسابات دكاترة نشطة'}</option>${sessionOptions.doctors.map(doctor => `<option value="${doctor.id}">${esc(doctor.name)}</option>`).join('')}</select></div><div class="field"><label>المادة</label><select name="subject_id" required disabled><option value="">اختر المجموعة والدكتور أولًا</option></select><small class="field-hint" data-session-subject-help>اختر الفرقة والمجموعة والدكتور لعرض المواد المتاحة.</small></div><div class="field"><label>التاريخ</label><input name="date" type="date" required value="${esc(state.today)}" placeholder="اختر التاريخ"></div><div class="field"><label>وقت البداية</label><input name="start_time" type="time" required placeholder="اختر وقت البداية"></div><div class="field"><label>وقت النهاية</label><input name="end_time" type="time" required placeholder="اختر وقت النهاية"></div><div class="field wide"><label>عنوان المحاضرة</label><input name="title" required value="محاضرة الكورس"></div><div class="wide"><button class="button">إضافة محاضرة</button></div></form>` : '<div class="notice">عرض فقط. يمكن للمساعدين المخوّلين إدارة المواعيد.</div>';
   const statusLabels = { scheduled: 'مجدولة', started: 'بدأت', ended: 'انتهت', cancelled: 'ملغاة' };
-  frame(`<section class="panel"><div class="panel-head"><div><h2>جدول المحاضرات</h2><p>${meta.phase.course_started ? 'المحاضرات مفعّلة.' : 'يمكن تجهيز الجدول الآن؛ الحضور لا يبدأ قبل موعد بداية الكورس.'}</p></div></div>${form}</section><section class="panel"><div class="panel-head"><h2>المواعيد المسجلة</h2></div>${sessions.length ? `<div class="table-scroll"><table><thead><tr><th>التاريخ</th><th>الوقت</th><th>الفرقة</th><th>المجموعة</th><th>المادة</th><th>الدكتور</th><th>عنوان المحاضرة</th><th>الحالة</th>${state.user.role === 'assistant' ? '<th>إجراء</th>' : ''}</tr></thead><tbody>${sessions.map(s => `<tr><td>${dateLabel(s.date)}</td><td>${s.start_time ? timeLabel(s.start_time) : '—'}${s.end_time ? `–${timeLabel(s.end_time)}` : ''}</td><td>${esc(s.level_name)}</td><td>${esc(s.group_name)}</td><td>${esc(s.subject_name || '—')}</td><td>${esc(s.doctor_name || '—')}</td><td>${esc(s.title)}</td><td><span class="tag ${s.status === 'cancelled' ? 'off' : ''}">${statusLabels[s.status]}</span></td>${state.user.role === 'assistant' ? `<td><button class="button secondary" data-session-edit="${s.id}">تعديل</button> <button class="button secondary" data-session="${s.id}" data-cancelled="${s.cancelled ? 0 : 1}">${s.cancelled ? 'استعادة' : 'إلغاء'}</button></td>` : ''}</tr>`).join('')}</tbody></table></div>` : '<div class="empty"><strong>لا توجد محاضرات</strong>ستظهر الجلسات الفعلية التي تنشئها دنيا هنا.</div>'}</section>`, 'أيام المحاضرات', state.user.role === 'assistant' ? 'إدارة مواعيد الجلسات' : 'مشاهدة مواعيد المحاضرات وحالتها');
+  frame(`<section class="panel"><div class="panel-head"><div><h2>جدول المحاضرات</h2><p>${meta.phase.course_started ? 'المحاضرات مفعّلة.' : 'يمكن تجهيز الجدول الآن؛ الحضور لا يبدأ قبل موعد بداية الكورس.'}</p></div></div>${form}</section><section class="panel"><div class="panel-head"><h2>المواعيد المسجلة</h2></div>${sessions.length ? `<div class="table-scroll"><table><thead><tr><th>التاريخ</th><th>الوقت</th><th>الفرقة</th><th>المجموعة</th><th>المادة</th><th>الدكتور</th><th>عنوان المحاضرة</th><th>الحالة</th>${state.user.role === 'assistant' ? '<th>إجراء</th>' : ''}</tr></thead><tbody>${sessions.map(s => `<tr><td>${dateLabel(s.date)}</td><td>${s.start_time ? timeLabel(s.start_time) : '—'}${s.end_time ? `–${timeLabel(s.end_time)}` : ''}</td><td>${esc(s.level_name)}</td><td>${esc(s.group_name)}</td><td>${esc(s.subject_name || '—')}</td><td>${esc(s.doctor_name || '—')}</td><td>${esc(s.title)}</td><td><span class="tag ${s.status === 'cancelled' ? 'off' : ''}">${statusLabels[s.status]}</span></td>${state.user.role === 'assistant' ? `<td><button class="button secondary" data-session-edit="${s.id}">تعديل</button> <button class="button secondary" data-session="${s.id}" data-cancelled="${s.cancelled ? 0 : 1}">${s.cancelled ? 'استعادة' : 'إلغاء'}</button></td>` : ''}</tr>`).join('')}</tbody></table></div>` : '<div class="empty"><strong>لا توجد محاضرات</strong>ستظهر المواعيد هنا بعد إضافتها من حساب مخوّل.</div>'}</section>`, 'أيام المحاضرات', state.user.role === 'assistant' ? 'إدارة مواعيد الجلسات' : 'مشاهدة مواعيد المحاضرات وحالتها');
   if (state.user.role === 'assistant') {
     const sessionForm = document.querySelector('#session-form');
     const updateSubjects = () => refreshSessionSubjects(sessionForm, sessionOptions);
@@ -768,10 +947,123 @@ async function renderUsers() {
     document.querySelector('#group-form').addEventListener('submit', createStructure);
     return;
   }
+  if (normalizeRole(state.user) === 'admin') {
+    const permissionData = await api('/permissions');
+    renderUserManagement(meta, users, permissionData, structurePanel);
+    return;
+  }
   frame(`<section class="panel"><div class="panel-head"><div><h2>إعدادات الكورس</h2><p>السعر الافتراضي للطلاب الجدد فقط.</p></div></div><form id="course-form" class="form-grid"><div class="field"><label>اسم الكورس</label><input name="name" required value="${esc(meta.course.name)}"></div><div class="field"><label>السعر الافتراضي بالجنيه</label><input name="price" inputmode="decimal" min="0" step="0.01" required value="${(meta.course.price / 100).toFixed(2)}"></div><div class="form-actions wide"><button class="button">حفظ الإعدادات</button></div></form></section><section class="panel"><div class="panel-head"><div><h2>حسابات الإدارة والمساعدة</h2><p>تعطيل الحساب ينهي جلساته المفتوحة.</p></div></div><div class="table-scroll"><table><thead><tr><th>الاسم</th><th>اسم الدخول</th><th>الدور</th><th>الحالة</th><th>تغيير سعر الطالب</th><th>إجراءات</th></tr></thead><tbody>${users.map(u => `<tr><td>${esc(u.name)}</td><td>${esc(u.username)}</td><td>${u.role === 'admin' ? 'إدارة' : 'مساعدة'}</td><td><span class="tag ${u.active ? '' : 'off'}">${u.active ? 'نشط' : 'معطل'}</span></td><td>${u.role === 'assistant' ? `<input type="checkbox" data-permission="${u.id}" ${u.can_set_price ? 'checked' : ''} aria-label="السماح بتغيير سعر الطالب">` : '—'}</td><td>${u.role === 'assistant' ? `<button class="button secondary" data-user-toggle="${u.id}" data-active="${u.active ? 0 : 1}">${u.active ? 'تعطيل' : 'تفعيل'}</button> <button class="button secondary" data-user-password="${u.id}">تعيين كلمة مرور</button>` : '—'}</td></tr>`).join('')}</tbody></table></div></section>${structurePanel}`, 'الحسابات', 'إعدادات الكورس والحسابات والهيكل الدراسي');
   document.querySelector('#course-form').addEventListener('submit', saveCourse);
   document.querySelector('#level-form').addEventListener('submit', createStructure);
   document.querySelector('#group-form').addEventListener('submit', createStructure);
+}
+function permissionGroupsMarkup(catalog, selected = []) {
+  const selectedKeys = new Set(selected);
+  const groups = Object.groupBy(catalog.items, permission => permission.category);
+  return Object.entries(groups).map(([category, permissions]) => {
+    const selectedCount = permissions.filter(permission => selectedKeys.has(permission.key)).length;
+    return `<details class="permission-category" data-permission-category="${esc(category)}"><summary><strong>${esc(category)}</strong><span class="permission-count" data-permission-count>${selectedCount} من ${permissions.length} مفعّل</span></summary><div class="permission-category-content"><div class="permission-category-actions"><button type="button" class="button secondary" data-permission-select-all>تحديد الكل</button><button type="button" class="button secondary" data-permission-clear-all>إلغاء الكل</button></div><div class="permission-options">${permissions.map(permission => `<label class="field permission-option"><input type="checkbox" data-permission-key="${permission.key}" ${selectedKeys.has(permission.key) ? 'checked' : ''}><span>${esc(permission.description)}</span></label>`).join('')}</div></div></details>`;
+  }).join('');
+}
+function updatePermissionCounts(root) {
+  root.querySelectorAll('[data-permission-category]').forEach(category => {
+    const inputs = [...category.querySelectorAll('[data-permission-key]')];
+    const count = category.querySelector('[data-permission-count]');
+    if (count) count.textContent = `${inputs.filter(input => input.checked).length} من ${inputs.length} مفعّل`;
+  });
+}
+function bindPermissionGroupControls(root) {
+  root.querySelectorAll('[data-permission-select-all]').forEach(button => button.addEventListener('click', () => {
+    button.closest('[data-permission-category]').querySelectorAll('[data-permission-key]').forEach(input => { input.checked = true; });
+    updatePermissionCounts(root);
+  }));
+  root.querySelectorAll('[data-permission-clear-all]').forEach(button => button.addEventListener('click', () => {
+    button.closest('[data-permission-category]').querySelectorAll('[data-permission-key]').forEach(input => { input.checked = false; });
+    updatePermissionCounts(root);
+  }));
+  root.querySelectorAll('[data-permission-key]').forEach(input => input.addEventListener('change', () => updatePermissionCounts(root)));
+  updatePermissionCounts(root);
+}
+function renderUserManagement(meta, users, permissionData, structurePanel) {
+  const roles = [['admin', 'Admin'], ['doctor', 'Doctor'], ['assistant', 'Assistant'], ['student', 'Student']];
+  const rows = users.map(user => `<tr><td>${esc(user.name)}</td><td>${esc(user.username)}</td><td>${roles.find(([role]) => role === user.role)?.[1] || esc(user.role)}</td><td><span class="tag ${user.active ? '' : 'off'}">${user.active ? 'نشط' : 'معطل'}</span></td><td>${user.role === 'student' ? `${esc(user.code || '')} · ${esc(meta.levels.find(level => level.id === user.level_id)?.name || '')}` : '—'}</td><td><button class="button secondary" data-user-permissions="${user.id}">الصلاحيات</button> <button class="button secondary" data-user-password="${user.id}">إعادة تعيين كلمة المرور</button> ${user.id === state.user.id ? '' : `<button class="button secondary" data-user-edit="${user.id}">تعديل</button> <button class="button secondary" data-user-toggle="${user.id}" data-active="${user.active ? 0 : 1}">${user.active ? 'تعطيل' : 'تفعيل'}</button> <button class="button danger" data-user-delete="${user.id}">حذف نهائي</button>`}</td></tr>`).join('');
+  const levelOptions = meta.levels.map(level => `<option value="${level.id}">${esc(level.name)}</option>`).join('');
+  const groupOptions = meta.groups.map(group => `<option value="${group.id}" data-level="${group.level_id}">${esc(meta.levels.find(level => level.id === group.level_id)?.name || '')} · ${esc(group.name)}</option>`).join('');
+  frame(`<section class="panel user-create-panel"><div class="panel-head"><div><h2>إضافة مستخدم</h2><p>أنشئ حسابًا وحدد نوعه وصلاحياته قبل الحفظ.</p></div></div><form id="create-user-form">
+    <div class="form-grid"><div class="field"><label>الاسم الكامل</label><input name="name" required minlength="2" maxlength="120"></div><div class="field"><label>اسم المستخدم</label><input name="username" required minlength="3" maxlength="60" autocomplete="username"></div>
+    <div class="field"><label>كلمة المرور</label><div class="password-input-wrap"><input name="password" type="password" data-password-input data-password-strength required minlength="12" maxlength="128" autocomplete="new-password">${passwordToggleMarkup()}</div></div><div class="field"><label>تأكيد كلمة المرور</label><div class="password-input-wrap"><input name="confirm_password" type="password" data-password-input required minlength="12" maxlength="128" autocomplete="new-password">${passwordToggleMarkup()}</div></div>
+    <div class="field wide user-password-strength-field">${passwordStrengthMarkup()}</div>
+    <div class="field"><label>نوع الحساب</label><select name="role">${roles.map(([value, label]) => `<option value="${value}">${label}</option>`).join('')}</select></div><div class="field"><label>الحالة</label><select name="active"><option value="1">نشط</option><option value="0">غير نشط</option></select></div></div>
+    <div id="new-student-fields" class="form-grid" hidden><div class="field"><label>كود الطالب</label><input name="code" minlength="1" maxlength="32"></div><div class="field"><label>رقم الهاتف (اختياري)</label><input name="phone" maxlength="24"></div><div class="field"><label>الفرقة</label><select name="level_id">${levelOptions}</select></div><div class="field"><label>المجموعة</label><select name="group_id">${groupOptions}</select></div><p class="muted wide">إنشاء حساب طالب ينشئ معه سجل الطالب والارتباط الدراسي للحفاظ على عمل لوحة الطالب وQR والحضور والمدفوعات.</p></div>
+    <div class="user-permissions-heading"><h3 class="section-title">الصلاحيات</h3><p class="muted">اختر ما يستطيع الحساب الوصول إليه. Admin لديه وصول كامل تلقائيًا.</p></div><div id="new-user-permissions" class="permission-matrix">${permissionGroupsMarkup(permissionData, permissionData.defaults.admin)}</div>
+    <div class="form-actions"><button class="button">إنشاء الحساب</button></div></form></section>
+    <section class="panel"><div class="panel-head"><div><h2>المستخدمون</h2><p>الحسابات الحالية وحالتها وصلاحياتها.</p></div></div><div class="table-scroll"><table><thead><tr><th>الاسم</th><th>اسم المستخدم</th><th>نوع الحساب</th><th>الحالة</th><th>بيانات الطالب</th><th>إجراءات</th></tr></thead><tbody>${rows || '<tr><td colspan="6">لا توجد حسابات.</td></tr>'}</tbody></table></div></section>
+    <details class="panel user-extra-settings"><summary><strong>إعدادات الكورس والفرق والمجموعات</strong><span>إعدادات إضافية</span></summary><div class="user-extra-settings-content"><section class="panel"><div class="panel-head"><div><h2>إعدادات الكورس</h2><p>السعر الافتراضي للطلاب الجدد فقط.</p></div></div><form id="course-form" class="form-grid"><div class="field"><label>اسم الكورس</label><input name="name" required value="${esc(meta.course.name)}"></div><div class="field"><label>السعر الافتراضي بالجنيه</label><input name="price" inputmode="decimal" min="0" step="0.01" required value="${(meta.course.price / 100).toFixed(2)}"></div><div class="form-actions wide"><button class="button">حفظ الإعدادات</button></div></form></section>${structurePanel}</div></details>`, 'إدارة المستخدمين', 'إنشاء الحسابات وتحديد أنواعها وصلاحياتها');
+  const form = document.querySelector('#create-user-form');
+  const roleSelect = form.elements.role;
+  const studentFields = form.querySelector('#new-student-fields');
+  const toggleStudentFields = () => {
+    const isStudent = roleSelect.value === 'student';
+    studentFields.hidden = !isStudent;
+    for (const name of ['code', 'level_id', 'group_id']) form.elements[name].required = isStudent;
+  };
+  const selectRoleDefaults = () => {
+    const selected = new Set(permissionData.defaults[roleSelect.value] || []);
+    form.querySelectorAll('[data-permission-key]').forEach(input => { input.checked = selected.has(input.dataset.permissionKey); });
+    updatePermissionCounts(form);
+  };
+  roleSelect.addEventListener('change', () => { toggleStudentFields(); selectRoleDefaults(); });
+  bindPermissionGroupControls(form);
+  toggleStudentFields();
+  const levelSelect = form.elements.level_id, groupSelect = form.elements.group_id;
+  levelSelect.addEventListener('change', () => {
+    for (const option of groupSelect.options) option.hidden = option.dataset.level !== levelSelect.value;
+    if (groupSelect.selectedOptions[0]?.hidden) groupSelect.value = [...groupSelect.options].find(option => option.dataset.level === levelSelect.value)?.value || '';
+  });
+  levelSelect.dispatchEvent(new Event('change'));
+  form.addEventListener('submit', createManagedUser);
+  document.querySelectorAll('[data-user-permissions]').forEach(button => button.addEventListener('click', () => editUserPermissions(button.dataset.userPermissions, permissionData)));
+  document.querySelector('#course-form')?.addEventListener('submit', saveCourse);
+  document.querySelector('#level-form')?.addEventListener('submit', createStructure);
+  document.querySelector('#group-form')?.addEventListener('submit', createStructure);
+}
+async function createManagedUser(event) {
+  event.preventDefault();
+  const form = event.currentTarget, values = new FormData(form), button = form.querySelector('button[type="submit"]');
+  if (values.get('password') !== values.get('confirm_password')) return toast('كلمتا المرور غير متطابقتين.', true);
+  const body = {
+    name: values.get('name'), username: values.get('username'), password: values.get('password'),
+    role: values.get('role'), active: values.get('active') === '1',
+    permissions: [...form.querySelectorAll('[data-permission-key]:checked')].map(input => input.dataset.permissionKey)
+  };
+  if (body.role === 'student') Object.assign(body, {
+    code: values.get('code'), phone: values.get('phone'),
+    level_id: Number(values.get('level_id')), group_id: Number(values.get('group_id'))
+  });
+  setBusy(button, true);
+  try {
+    await api('/users', { method: 'POST', body: JSON.stringify(body) });
+    toast('تم إنشاء الحساب وتعيين صلاحياته.');
+    await renderUsers();
+  } catch (error) { toast(error.message, true); setBusy(button, false); }
+}
+async function editUserPermissions(userId, permissionData) {
+  try {
+    const result = await api(`/users/${userId}/permissions`);
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop" data-dismiss><section class="modal user-permissions-modal" role="dialog" aria-modal="true" aria-labelledby="user-permissions-title"><div class="modal-head"><h2 id="user-permissions-title">صلاحيات المستخدم</h2>${iconButton('إغلاق')}</div><form id="user-permissions-form" data-id="${userId}"><div class="permission-editor">${permissionGroupsMarkup(permissionData, result.permissions)}</div><div class="form-actions"><button type="button" class="button secondary" data-action="close-modal">إلغاء</button><button class="button">حفظ الصلاحيات</button></div></form></section></div>`);
+    const form = document.querySelector('#user-permissions-form');
+    bindPermissionGroupControls(form);
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const save = form.querySelector('button[type="submit"]') || form.querySelector('.form-actions .button:last-child');
+      const permissions = [...form.querySelectorAll('[data-permission-key]:checked')].map(input => input.dataset.permissionKey);
+      setBusy(save, true);
+      try {
+        await api(`/users/${userId}/permissions`, { method: 'PUT', body: JSON.stringify({ permissions }) });
+        closeModal(); toast('تم حفظ الصلاحيات.'); await renderUsers();
+      } catch (error) { toast(error.message, true); setBusy(save, false); }
+    });
+  } catch (error) { toast(error.message, true); }
 }
 async function createStructure(event) {
   event.preventDefault(); const form = new FormData(event.currentTarget), type = event.currentTarget.id === 'level-form' ? 'levels' : 'groups', body = Object.fromEntries(form), button = event.currentTarget.querySelector('button');
@@ -919,10 +1211,20 @@ async function uploadLibraryMaterial(event) {
       content_type: contentType, file_size: file.size
     };
     upload = await api('/academic/library/upload-url', { method: 'POST', body: JSON.stringify(metadata) });
-    const uploadForm = new FormData();
-    for (const [name, value] of Object.entries(upload.fields)) uploadForm.append(name, value);
-    uploadForm.append('file', file, file.name);
-    const response = await fetch(upload.url, { method: 'POST', body: uploadForm });
+    let response;
+    if (upload.local) {
+      response = await fetch(upload.url, {
+        method: 'PUT',
+        credentials: 'same-origin',
+        headers: { 'Content-Type': contentType, 'X-CSRF-Token': state.csrf },
+        body: file
+      });
+    } else {
+      const uploadForm = new FormData();
+      for (const [name, value] of Object.entries(upload.fields)) uploadForm.append(name, value);
+      uploadForm.append('file', file, file.name);
+      response = await fetch(upload.url, { method: 'POST', body: uploadForm });
+    }
     if (!response.ok) throw new Error(`تعذر رفع الملف إلى المخزن (HTTP ${response.status})`);
     await api('/academic/library/complete', {
       method: 'POST', body: JSON.stringify({ ...metadata, upload_id: upload.upload_id })
@@ -1008,12 +1310,12 @@ async function openExamEditor(examId){
   try{
     const [exam,questions]=await Promise.all([api('/academic/exams?page=1&size=100'),api(`/academic/exams/${examId}/questions`)]);
     const record=exam.items.find(item=>item.id===Number(examId));if(!record)throw new Error('الاختبار غير موجود');
-    const questionRows=questions.items.map(question=>`<li><span>${esc(question.question_text)} <small>(${question.question_type==='multiple_choice'?'اختيار من متعدد':'صح أو خطأ'})</small></span><span><button type="button" class="button secondary" data-question-edit="${question.id}">تعديل</button> <button type="button" class="button danger" data-question-delete="${question.id}">حذف</button></span></li>`).join('');
+    const questionRows=questions.items.map(question=>`<li><span>${esc(question.question_text)} <small>(${question.question_type==='multiple_choice'?'اختيار من متعدد':'صح أو خطأ'})</small></span><span>${record.status==='closed'?'<span class="muted">الاختبار مغلق</span>':`<button type="button" class="button secondary" data-question-edit="${question.id}">تعديل</button> <button type="button" class="button danger" data-question-delete="${question.id}">حذف</button>`}</span></li>`).join('');
     document.body.insertAdjacentHTML('beforeend',`<div class="modal-backdrop" data-dismiss><section class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h2>إدارة الاختبار: ${esc(record.title)}</h2>${iconButton('إغلاق')}</div><p>${esc(record.subject_name)} · ${esc(record.lecture_title)} · مخزون الأسئلة ${questions.items.length}/${record.question_count}</p><form id="exam-settings-form" data-id="${examId}" class="form-grid"><div class="field"><label>المدة بالدقائق</label><input name="duration_minutes" type="number" min="1" max="600" value="${record.duration_minutes}" required></div><div class="field"><label>عدد أسئلة الطالب</label><input name="question_count" type="number" min="1" max="500" value="${record.question_count}" required></div><div class="field"><label>حالة الاختبار</label><select name="status"><option value="draft" ${record.status==='draft'?'selected':''}>مسودة</option><option value="published" ${record.status==='published'?'selected':''}>منشور</option><option value="closed" ${record.status==='closed'?'selected':''}>مغلق</option></select></div><div class="form-actions wide"><button class="button">حفظ الإعدادات</button></div></form><h3 class="section-title">مخزون الأسئلة (${questions.items.length})</h3><ul class="exam-question-list">${questionRows||'<li class="muted">لم تتم إضافة أسئلة بعد.</li>'}</ul>${record.status==='draft'?`<form id="question-create-form" class="form-grid"><div class="field wide"><label>السؤال</label><textarea name="question_text" required maxlength="4000"></textarea></div><div class="field"><label>النوع</label><select name="question_type"><option value="multiple_choice">اختيار من متعدد</option><option value="true_false">صح أو خطأ</option></select></div><div class="field wide" data-question-options><label>الاختيارات</label><input name="option_0" placeholder="الخيار الأول" required><input name="option_1" placeholder="الخيار الثاني" required><input name="option_2" placeholder="الخيار الثالث"><input name="option_3" placeholder="الخيار الرابع"></div><div class="field" data-correct-index><label>رقم الاختيار الصحيح</label><select name="correct_answer"><option value="0">الأول</option><option value="1">الثاني</option><option value="2">الثالث</option><option value="3">الرابع</option></select></div><div class="field hidden" data-correct-bool><label>الإجابة الصحيحة</label><select name="true_false_answer"><option value="true">صح</option><option value="false">خطأ</option></select></div><div class="form-actions wide"><button class="button">إضافة سؤال للمخزون</button></div></form>`:''}<div class="form-actions"><button type="button" class="button secondary" data-action="close-modal">إغلاق</button></div></section></div>`);
     const settingsForm=document.querySelector('#exam-settings-form');settingsForm.addEventListener('submit',saveAcademicExamSettings);
     const questionForm=document.querySelector('#question-create-form');if(questionForm){questionForm.addEventListener('submit',addAcademicQuestion);questionForm.elements.question_type.addEventListener('change',()=>toggleQuestionFields(questionForm));}
-    document.querySelectorAll('[data-question-edit]').forEach(button=>button.addEventListener('click',()=>editAcademicQuestion(Number(button.dataset.questionEdit),questions.items)));
-    document.querySelectorAll('[data-question-delete]').forEach(button=>button.addEventListener('click',()=>deleteAcademicQuestion(Number(button.dataset.questionDelete),examId)));
+    document.querySelectorAll('[data-question-edit]').forEach(button=>button.addEventListener('click',()=>openAcademicQuestionEditor(Number(button.dataset.questionEdit),examId,questions.items)));
+    document.querySelectorAll('[data-question-delete]').forEach(button=>button.addEventListener('click',()=>confirmAcademicQuestionDelete(Number(button.dataset.questionDelete),examId,questions.items)));
   }catch(error){toast(error.message,true);}
 }
 function toggleQuestionFields(form){
@@ -1159,7 +1461,7 @@ async function deleteAcademicQuestion(id,examId){
     frame(`<section class="panel exam-result"><h2>${iconSvg('target')} ${esc(attempt.exam_title)}</h2><div class="summary-grid"><div class="summary-item"><span>الدرجة</span><b>${fmtCount(attempt.score)} / ${fmtCount(attempt.total_questions)}</b></div><div class="summary-item"><span>النسبة</span><b>${fmtCount(Math.round(attempt.percentage))}%</b></div><div class="summary-item"><span>صح</span><b>${fmtCount(attempt.correct_answers)}</b></div><div class="summary-item"><span>خطأ</span><b>${fmtCount(attempt.wrong_answers)}</b></div><div class="summary-item"><span>مدة الحل</span><b>${fmtCount(Math.floor(attempt.duration_seconds / 60))}:${String(attempt.duration_seconds % 60).padStart(2, '0')}</b></div></div></section><section class="exam-review-list">${rows}</section><button class="button secondary" data-route="dashboard">العودة إلى ملفي</button>`, 'نتيجة الاختبار', `${esc(attempt.subject_name)} · ${esc(attempt.lecture_title)}`);
   }
   async function renderStudent() {
-    const [s, inbox, meta, examData, lectureData, certificateData] = await Promise.all([api('/student/me'), api('/notifications'), api('/meta'), api('/student/exams'), api('/student/lectures?page=1&size=20'), api('/student/certificates')]); state.data = s;
+    const [s, inbox, meta, examData, lectureData, certificateData, googleStatus] = await Promise.all([api('/student/me'), api('/notifications'), api('/meta'), api('/student/exams'), api('/student/lectures?page=1&size=20'), api('/student/certificates'), api('/auth/google/status')]); state.data = s;
   state.notifications = inbox.items; state.unreadNotifications = inbox.unread_count;
   const rowsAttendance = s.attendance.map(a => `<tr><td>${dateLabel(a.date)}</td><td>${esc(a.status)}</td><td>${a.created_at ? datetimeLabel(a.created_at) : '—'}</td></tr>`).join('');
   const rowsPayments = s.payments.filter(p => !p.voided_at).map(p => `<tr><td>${datetimeLabel(p.created_at)}</td><td>${moneyLabel(p.amount)}</td><td>${esc(p.recorded_by_name)}</td></tr>`).join('');
@@ -1183,6 +1485,7 @@ async function deleteAcademicQuestion(id,examId){
   const academicSection = `<section class="panel"><div class="panel-head"><div><h2>${iconSvg('notebook')} اختباراتي</h2><p>الاختبارات والمحاضرات المؤهلة لفرقتك ومجموعتك</p></div></div>${sharedExamHtml}${inProgressHtml?`<h3 class="section-title">محاولات مستمرة</h3>${inProgressHtml}`:''}<h3 class="section-title">اختبارات متاحة</h3>${availableHtml||'<div class="empty">لا توجد اختبارات منشورة متاحة.</div>'}<h3 class="section-title">اختبارات تم حلها</h3>${completedHtml||'<div class="empty">لا توجد نتائج سابقة.</div>'}<h3 class="section-title">محاضراتي</h3>${lecturesHtml||'<div class="empty">لا توجد محاضرات مسجلة لفرقتك ومجموعتك.</div>'}</section>`;
   const certificateSection = `<section class="panel"><div class="panel-head"><div><h2>شهاداتي</h2><p>الشهادات التي أرسلها لك الدكتور</p></div></div>${certificatesHtml || '<div class="empty">لا توجد شهادات حتى الآن.</div>'}</section>`;
   const examCertificateSection = `<section class="panel"><div class="panel-head"><div><h2>شهادات الاختبارات</h2><p>شهادات الاختبارات التي أرسلها لك الدكتور، مع درجاتك ونسبتك</p></div></div>${examCertificatesHtml || '<div class="empty">لا توجد شهادات اختبارات حتى الآن.</div>'}</section>`;
+  const googlePanel = googleAccountPanel(googleStatus);
   frame(`<section class="panel student-card"><div class="profile-head"><div><h2>${esc(s.name)}</h2><div class="profile-meta"><span class="tag">${esc(s.level_name)}</span><span class="tag">${esc(s.group_name)}</span><span class="tag">الكود: ${esc(s.code)}</span></div><div class="summary-grid"><div class="summary-item"><span>الحضور</span><b>${fmtCount(s.present)} يوم</b></div><div class="summary-item"><span>الغياب</span><b>${fmtCount(s.absent)} يوم</b></div><div class="summary-item"><span>نسبة الحضور</span><b>${fmtCount(s.percentage)}%</b></div><div class="summary-item"><span>سعر الكورس</span><b>${moneyLabel(s.price)}</b></div><div class="summary-item"><span>إجمالي المدفوع</span><b>${moneyLabel(s.paid)}</b></div><div class="summary-item"><span>المتبقي</span><b>${moneyLabel(s.remaining)}</b></div></div></div><div class="qr-block"><img src="/api/students/${s.id}/qr" alt="رمز QR للطالب"><button class="button secondary qr-download" data-action="download-qr">حفظ QR على الهاتف</button></div></div></section>${certificateSection}${examCertificateSection}<section class="grid history-grid"><article class="panel"><h2>سجل الحضور</h2>${rowsAttendance ? `<div class="table-scroll" style="margin-top:12px"><table><thead><tr><th>التاريخ</th><th>الحالة</th><th>الوقت</th></tr></thead><tbody>${rowsAttendance}</tbody></table></div>` : '<div class="empty">لا توجد محاضرات مسجلة.</div>'}</article><article class="panel"><h2>سجل المدفوعات</h2>${rowsPayments ? `<div class="table-scroll" style="margin-top:12px"><table><thead><tr><th>التاريخ</th><th>المبلغ</th><th>بواسطة</th></tr></thead><tbody>${rowsPayments}</tbody></table></div>` : '<div class="empty">لا توجد مدفوعات مسجلة.</div>'}<div class="notice" style="margin-top:12px">إجمالي الكورس ${moneyLabel(s.price)} · المدفوع ${moneyLabel(s.paid)} · المتبقي ${moneyLabel(s.remaining)}</div></article></section>`, 'ملفي الدراسي', `${esc(s.level_name)} · ${esc(s.group_name)}`);
   const attendanceContent = meta.phase.course_started ? (rowsAttendance ? `<div class="table-scroll" style="margin-top:12px"><table><thead><tr><th>التاريخ</th><th>الحالة</th><th>الوقت</th></tr></thead><tbody>${rowsAttendance}</tbody></table></div>` : '<div class="empty">لا توجد محاضرات مسجلة.</div>') : '<div class="notice">المحاضرات لم تبدأ بعد.</div>';
   const studentProfileRows = [
@@ -1191,7 +1494,7 @@ async function deleteAcademicQuestion(id,examId){
     ['سعر الحجز', moneyLabel(s.course_price_snapshot)], ['إجمالي المدفوع', moneyLabel(s.paid)], ['المتبقي', moneyLabel(s.remaining)],
     ...(meta.phase.course_started ? [['الحضور', `${fmtCount(s.present)} يوم`], ['الغياب', `${fmtCount(s.absent)} يوم`], ['نسبة الحضور', `${fmtCount(s.percentage)}%`]] : [])
   ].map(([label, value]) => `<tr><th scope="row">${label}</th><td>${value}</td></tr>`).join('');
-  frame(`<section class="panel student-card"><div class="student-profile-layout"><div class="student-profile-details"><h2>بيانات الطالب</h2><div class="table-scroll student-profile-table"><table><tbody>${studentProfileRows}</tbody></table></div><button class="button large student-qr-trigger" data-action="show-student-qr">اعرض رمز QR لتسجيل الحضور</button></div><div class="qr-block student-profile-qr"><img src="/api/students/${s.id}/qr" alt="رمز QR للطالب"><button class="button secondary qr-download" data-action="download-qr">حفظ QR على الهاتف</button></div></div></section>${certificateSection}${examCertificateSection}<section class="grid history-grid"><article class="panel"><h2>سجل الحضور</h2>${attendanceContent}</article><article class="panel"><h2>سجل المدفوعات</h2>${rowsPayments ? `<div class="table-scroll" style="margin-top:12px"><table><thead><tr><th>التاريخ</th><th>المبلغ</th><th>بواسطة</th></tr></thead><tbody>${rowsPayments}</tbody></table></div>` : '<div class="empty">لا توجد مدفوعات مسجلة.</div>'}<div class="notice" style="margin-top:12px">إجمالي الكورس ${moneyLabel(s.course_price_snapshot)} · المدفوع ${moneyLabel(s.paid)} · المتبقي ${moneyLabel(s.remaining)}</div></article></section>`, 'ملفي الدراسي', `${esc(s.level_name)} · ${esc(s.group_name)}`);
+  frame(`<section class="panel student-card"><div class="student-profile-layout"><div class="student-profile-details"><h2>بيانات الطالب</h2><div class="table-scroll student-profile-table"><table><tbody>${studentProfileRows}</tbody></table></div><button class="button large student-qr-trigger" data-action="show-student-qr">اعرض رمز QR لتسجيل الحضور</button></div><div class="qr-block student-profile-qr"><img src="/api/students/${s.id}/qr" alt="رمز QR للطالب"><button class="button secondary qr-download" data-action="download-qr">حفظ QR على الهاتف</button></div></div></section>${googlePanel}${certificateSection}${examCertificateSection}<section class="grid history-grid"><article class="panel"><h2>سجل الحضور</h2>${attendanceContent}</article><article class="panel"><h2>سجل المدفوعات</h2>${rowsPayments ? `<div class="table-scroll" style="margin-top:12px"><table><thead><tr><th>التاريخ</th><th>المبلغ</th><th>بواسطة</th></tr></thead><tbody>${rowsPayments}</tbody></table></div>` : '<div class="empty">لا توجد مدفوعات مسجلة.</div>'}<div class="notice" style="margin-top:12px">إجمالي الكورس ${moneyLabel(s.course_price_snapshot)} · المدفوع ${moneyLabel(s.paid)} · المتبقي ${moneyLabel(s.remaining)}</div></article></section>`, 'ملفي الدراسي', `${esc(s.level_name)} · ${esc(s.group_name)}`);
   document.querySelector('.history-grid')?.insertAdjacentHTML('beforebegin',academicSection);
 }
 function showStudentQr() {
@@ -1448,7 +1751,7 @@ async function submitPayment(event) {
 function studentModal(s = {}) {
   api('/meta').then(meta => {
     const canSetPrice = state.user.role === 'admin' || state.user.can_set_price;
-    document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h2>${s.id ? 'تعديل بيانات الطالب' : 'إضافة طالب'}</h2>${iconButton('إغلاق')}</div><form id="student-form" class="form-grid"><input type="hidden" name="id" value="${s.id || ''}"><div class="field"><label>اسم الطالب</label><input name="name" required minlength="2" value="${esc(s.name || '')}"></div><div class="field"><label>كود الطالب</label><input name="code" required value="${esc(s.code || '')}"></div><div class="field"><label>الفرقة</label><select name="level_id" required>${meta.levels.map(l => `<option value="${l.id}" ${Number(s.level_id) === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select></div><div class="field"><label>المجموعة</label><select name="group_id" required>${meta.groups.map(g => `<option value="${g.id}" data-level="${g.level_id}" ${Number(s.group_id) === g.id ? 'selected' : ''}>${esc(meta.levels.find(l => l.id === g.level_id)?.name)} · ${esc(g.name)}</option>`).join('')}</select></div><div class="field"><label>رقم الهاتف (اختياري)</label><input name="phone" value="${esc(s.phone || '')}"></div><div class="field"><label>سعر الكورس بالجنيه</label><input name="price" inputmode="decimal" min="0" step="0.01" value="${s.id ? (s.price / 100).toFixed(2) : (meta.course.price / 100).toFixed(2)}" ${canSetPrice ? '' : 'readonly'}></div>${s.id ? `<label class="field"><span>حالة الحساب</span><select name="active"><option value="true" ${s.active ? 'selected' : ''}>نشط</option><option value="false" ${!s.active ? 'selected' : ''}>معطل</option></select></label>` : `<div class="field"><label>اسم الدخول</label><input name="username" required minlength="3"></div><div class="field"><label>كلمة المرور (12 حرفًا على الأقل)</label><div class="password-input-wrap"><input name="password" type="password" data-password-input minlength="12" required>${passwordToggleMarkup()}</div></div>`}<div class="form-actions wide"><button class="button">${s.id ? 'حفظ التعديلات' : 'حفظ الطالب وإنشاء QR'}</button></div></form></section></div>`);
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true"><div class="modal-head"><h2>${s.id ? 'تعديل بيانات الطالب' : 'إضافة طالب'}</h2>${iconButton('إغلاق')}</div><form id="student-form" class="form-grid"><input type="hidden" name="id" value="${s.id || ''}"><div class="field"><label>اسم الطالب</label><input name="name" required minlength="2" value="${esc(s.name || '')}"></div><div class="field"><label>كود الطالب</label><input name="code" required value="${esc(s.code || '')}"></div><div class="field"><label>الفرقة</label><select name="level_id" required>${meta.levels.map(l => `<option value="${l.id}" ${Number(s.level_id) === l.id ? 'selected' : ''}>${esc(l.name)}</option>`).join('')}</select></div><div class="field"><label>المجموعة</label><select name="group_id" required>${meta.groups.map(g => `<option value="${g.id}" data-level="${g.level_id}" ${Number(s.group_id) === g.id ? 'selected' : ''}>${esc(meta.levels.find(l => l.id === g.level_id)?.name)} · ${esc(g.name)}</option>`).join('')}</select></div><div class="field"><label>رقم الهاتف (اختياري)</label><input name="phone" value="${esc(s.phone || '')}"></div><div class="field"><label>سعر الكورس بالجنيه</label><input name="price" inputmode="decimal" min="0" step="0.01" value="${s.id ? (s.price / 100).toFixed(2) : (meta.course.price / 100).toFixed(2)}" ${canSetPrice ? '' : 'readonly'}></div>${s.id ? `<label class="field"><span>حالة الحساب</span><select name="active"><option value="true" ${s.active ? 'selected' : ''}>نشط</option><option value="false" ${!s.active ? 'selected' : ''}>معطل</option></select></label>` : `<div class="field"><label>اسم الدخول</label><input name="username" required minlength="3"></div><div class="field"><label>كلمة المرور (12 حرفًا على الأقل)</label><div class="password-input-wrap"><input name="password" type="password" data-password-input data-password-strength minlength="12" required>${passwordToggleMarkup()}</div>${passwordStrengthMarkup()}</div>`}<div class="form-actions wide"><button class="button">${s.id ? 'حفظ التعديلات' : 'حفظ الطالب وإنشاء QR'}</button></div></form></section></div>`);
     const form = document.querySelector('#student-form'), priceField = form.elements.price.closest('.field');
     const priceLabel = document.createElement('label'), priceOutput = document.createElement('output');
     priceLabel.textContent = s.id ? 'سعر الحجز المحفوظ' : 'سعر الكورس حسب الفرقة';
@@ -1492,7 +1795,7 @@ async function saveStudent(event) {
 }
 function closeModal() { document.querySelector('.modal-backdrop')?.remove(); }
 function passwordModal() {
-  document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="password-title"><div class="modal-head"><h2 id="password-title">تغيير كلمة المرور</h2>${iconButton('إغلاق')}</div><form id="password-form"><div class="field"><label>كلمة المرور الحالية</label><div class="password-input-wrap"><input name="current_password" type="password" data-password-input autocomplete="current-password" required>${passwordToggleMarkup()}</div></div><div class="field" style="margin-top:12px"><label>كلمة المرور الجديدة (12 حرفًا على الأقل)</label><div class="password-input-wrap"><input name="password" type="password" data-password-input autocomplete="new-password" minlength="12" required>${passwordToggleMarkup()}</div></div><button type="submit" class="button" style="margin-top:16px">تحديث كلمة المرور</button></form></section></div>`);
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop"><section class="modal" role="dialog" aria-modal="true" aria-labelledby="password-title"><div class="modal-head"><h2 id="password-title">تغيير كلمة المرور</h2>${iconButton('إغلاق')}</div><form id="password-form"><div class="field"><label>كلمة المرور الحالية</label><div class="password-input-wrap"><input name="current_password" type="password" data-password-input autocomplete="current-password" required>${passwordToggleMarkup()}</div></div><div class="field" style="margin-top:12px"><label>كلمة المرور الجديدة (12 حرفًا على الأقل)</label><div class="password-input-wrap"><input name="password" type="password" data-password-input data-password-strength autocomplete="new-password" minlength="12" required>${passwordToggleMarkup()}</div>${passwordStrengthMarkup()}</div><button type="submit" class="button" style="margin-top:16px">تحديث كلمة المرور</button></form></section></div>`);
   document.querySelector('#password-form').addEventListener('submit', async event => {
     event.preventDefault(); const form = new FormData(event.currentTarget), button = event.currentTarget.querySelector('button[type="submit"]'); setBusy(button, true);
     try { await api('/password', { method: 'POST', body: JSON.stringify({ current_password: form.get('current_password'), password: form.get('password') }) }); state.user = null; state.csrf = ''; closeModal(); renderLogin(); toast('تم تغيير كلمة المرور. سجّل الدخول مجددًا.'); }
@@ -1516,7 +1819,7 @@ async function rotateQr() {
   catch (error) { toast(error.message, true); }
 }
 async function resetStudentPassword() {
-  document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop" data-dismiss><section class="modal" role="dialog" aria-modal="true" aria-labelledby="reset-student-password-title"><div class="modal-head"><h2 id="reset-student-password-title">إعادة تعيين كلمة المرور</h2>${iconButton('إغلاق')}</div><form id="reset-student-password-form"><div class="field"><label for="student-new-password">كلمة المرور الجديدة (12 حرفًا على الأقل)</label><div class="password-input-wrap"><input id="student-new-password" name="password" type="password" data-password-input autocomplete="new-password" minlength="12" required>${passwordToggleMarkup()}</div></div><div class="form-actions"><button type="button" class="button secondary" data-action="close-modal">إلغاء</button><button type="submit" class="button">حفظ كلمة المرور</button></div></form></section></div>`);
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop" data-dismiss><section class="modal" role="dialog" aria-modal="true" aria-labelledby="reset-student-password-title"><div class="modal-head"><h2 id="reset-student-password-title">إعادة تعيين كلمة المرور</h2>${iconButton('إغلاق')}</div><form id="reset-student-password-form"><div class="field"><label for="student-new-password">كلمة المرور الجديدة (12 حرفًا على الأقل)</label><div class="password-input-wrap"><input id="student-new-password" name="password" type="password" data-password-input data-password-strength autocomplete="new-password" minlength="12" required>${passwordToggleMarkup()}</div>${passwordStrengthMarkup()}</div><div class="form-actions"><button type="button" class="button secondary" data-action="close-modal">إلغاء</button><button type="submit" class="button">حفظ كلمة المرور</button></div></form></section></div>`);
   document.querySelector('#reset-student-password-form').addEventListener('submit', async event => {
     event.preventDefault(); const form = event.currentTarget, button = form.querySelector('button[type="submit"]'); setBusy(button, true);
     try {
@@ -1554,26 +1857,131 @@ async function deleteStudent(id) {
   catch (error) { toast(error.message, true); }
 }
 async function userAction(id, body) {
-  try { await api(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) }); toast('تم تحديث الحساب'); await renderUsers(); }
-  catch (error) { toast(error.message, true); }
+  try {
+    await api(`/users/${id}`, { method: 'PATCH', body: JSON.stringify(body) });
+    toast('تم تحديث الحساب');
+    await renderUsers();
+    return true;
+  } catch (error) {
+    toast(error.message, true);
+    return false;
+  }
+}
+async function editManagedUser(id) {
+  try {
+    const [users, meta] = await Promise.all([api('/users'), api('/meta')]);
+    const user = users.find(item => item.id === Number(id));
+    if (!user) throw new Error('المستخدم غير موجود');
+    const roles = [['admin', 'Admin'], ['doctor', 'Doctor'], ['assistant', 'Assistant'], ['student', 'Student']];
+    const roleOptions = roles.map(([value, label]) =>
+      `<option value="${value}" ${user.role === value ? 'selected' : ''}>${label}</option>`).join('');
+    const levelOptions = meta.levels.map(level =>
+      `<option value="${level.id}" ${user.level_id === level.id ? 'selected' : ''}>${esc(level.name)}</option>`).join('');
+    const groupOptions = meta.groups.map(group =>
+      `<option value="${group.id}" data-level="${group.level_id}" ${user.group_id === group.id ? 'selected' : ''}>${esc(meta.levels.find(level => level.id === group.level_id)?.name || '')} · ${esc(group.name)}</option>`).join('');
+    document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop" data-dismiss><section class="modal" role="dialog" aria-modal="true" aria-labelledby="edit-user-title"><div class="modal-head"><h2 id="edit-user-title">تعديل الحساب</h2>${iconButton('إغلاق')}</div><form id="edit-user-form" data-id="${user.id}">
+      <div class="form-grid"><div class="field"><label for="edit-user-name">الاسم الكامل</label><input id="edit-user-name" name="name" required minlength="2" maxlength="120" value="${esc(user.name)}"></div>
+      <div class="field"><label for="edit-user-username">اسم المستخدم</label><input id="edit-user-username" name="username" required minlength="3" maxlength="60" value="${esc(user.username)}"></div>
+      <div class="field wide"><label for="edit-user-role">نوع الحساب</label><select id="edit-user-role" name="role">${roleOptions}</select></div></div>
+      <div id="edit-student-fields" class="form-grid" hidden><p class="muted wide">أكمل بيانات الطالب المطلوبة لتحويل هذا الحساب.</p>
+      <div class="field"><label for="edit-user-code">كود الطالب</label><input id="edit-user-code" name="code" minlength="1" maxlength="32"></div>
+      <div class="field"><label for="edit-user-phone">رقم الهاتف (اختياري)</label><input id="edit-user-phone" name="phone" maxlength="24"></div>
+      <div class="field"><label for="edit-user-level">الفرقة</label><select id="edit-user-level" name="level_id">${levelOptions}</select></div>
+      <div class="field"><label for="edit-user-group">المجموعة</label><select id="edit-user-group" name="group_id">${groupOptions}</select></div></div>
+      <p class="muted">تغيير نوع الحساب يعيد الصلاحيات إلى الإعدادات الافتراضية للدور الجديد. لا يمكن تحويل طالب لديه سجلات تاريخية إلى نوع آخر.</p>
+      <div class="form-actions"><button type="button" class="button secondary" data-action="close-modal">إلغاء</button><button type="submit" class="button">حفظ التعديلات</button></div></form></section></div>`);
+    const form = document.querySelector('#edit-user-form');
+    const roleSelect = form.elements.role;
+    const studentFields = form.querySelector('#edit-student-fields');
+    const updateStudentFields = () => {
+      const needsStudentProfile = roleSelect.value === 'student' && !user.student_id;
+      studentFields.hidden = !needsStudentProfile;
+      for (const name of ['code', 'level_id', 'group_id']) form.elements[name].required = needsStudentProfile;
+    };
+    const filterGroups = () => {
+      for (const option of form.elements.group_id.options) option.hidden = option.dataset.level !== form.elements.level_id.value;
+      if (form.elements.group_id.selectedOptions[0]?.hidden) {
+        form.elements.group_id.value = [...form.elements.group_id.options]
+          .find(option => option.dataset.level === form.elements.level_id.value)?.value || '';
+      }
+    };
+    roleSelect.addEventListener('change', updateStudentFields);
+    form.elements.level_id.addEventListener('change', filterGroups);
+    updateStudentFields();
+    filterGroups();
+    form.addEventListener('submit', async event => {
+      event.preventDefault();
+      const button = form.querySelector('button[type="submit"]');
+      const values = new FormData(form);
+      const body = { name: values.get('name'), username: values.get('username'), role: values.get('role') };
+      if (body.role === 'student' && !user.student_id) Object.assign(body, {
+        code: values.get('code'),
+        phone: values.get('phone'),
+        level_id: Number(values.get('level_id')),
+        group_id: Number(values.get('group_id'))
+      });
+      setBusy(button, true);
+      if (await userAction(user.id, body)) closeModal();
+      else setBusy(button, false);
+    });
+  } catch (error) {
+    toast(error.message, true);
+  }
+}
+async function deleteManagedUser(id) {
+  try {
+    const user = (await api('/users')).find(item => item.id === Number(id));
+    if (!user) throw new Error('المستخدم غير موجود');
+    const detail = user.role === 'doctor'
+      ? 'سيتم حذف مواده ومحاضراته واختباراته ودروس المذاكرة وملفات مكتبته نهائيًا. لا يمكن حذف الحساب إذا كانت له نتائج اختبارات محفوظة.'
+      : user.role === 'student'
+        ? 'سيتم حذف ملف الطالب وتقدمه وإجاباته نهائيًا. لا يمكن الحذف إذا وُجدت سجلات حضور أو مدفوعات أو محاولات اختبارات.'
+        : 'سيتم حذف الحساب نهائيًا وإلغاء جلساته وصلاحياته.';
+    if (!confirm(`حذف الحساب "${user.name}" (${user.username}) نهائيًا؟\n\n${detail}`)) return;
+    await api(`/users/${id}`, { method: 'DELETE' });
+    toast('تم حذف الحساب نهائيًا');
+    await renderUsers();
+  } catch (error) {
+    toast(error.message, true);
+  }
 }
 async function resetUserPassword(id) {
-  const password = prompt('أدخل كلمة مرور جديدة (12 حرفًا على الأقل):'); if (password === null) return;
-  await userAction(id, { password });
+  document.body.insertAdjacentHTML('beforeend', `<div class="modal-backdrop" data-dismiss><section class="modal" role="dialog" aria-modal="true" aria-labelledby="reset-user-password-title"><div class="modal-head"><h2 id="reset-user-password-title">تعيين كلمة مرور</h2>${iconButton('إغلاق')}</div><form id="reset-user-password-form"><div class="field"><label for="user-new-password">كلمة المرور الجديدة (12 حرفًا على الأقل)</label><div class="password-input-wrap"><input id="user-new-password" name="password" type="password" data-password-input data-password-strength autocomplete="new-password" minlength="12" required>${passwordToggleMarkup()}</div>${passwordStrengthMarkup()}</div><div class="form-actions"><button type="button" class="button secondary" data-action="close-modal">إلغاء</button><button type="submit" class="button">حفظ كلمة المرور</button></div></form></section></div>`);
+  document.querySelector('#reset-user-password-form').addEventListener('submit', async event => {
+    event.preventDefault();
+    const form = event.currentTarget, button = form.querySelector('button[type="submit"]');
+    setBusy(button, true);
+    try {
+      if (await userAction(id, { password: form.elements.password.value })) closeModal();
+      else setBusy(button, false);
+    } catch (error) { setBusy(button, false); }
+  });
 }
 async function logout() {
   try { await api('/logout', { method: 'POST', body: '{}' }); } catch { /* local session is cleared either way */ }
   state.user = null; state.csrf = ''; state.route = 'dashboard'; renderLogin();
+}
+async function animateLogout(button) {
+  if (!button || button.dataset.animating === 'true') return false;
+  button.dataset.animating = 'true';
+  button.disabled = true;
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return true;
+  button.classList.add('clicked');
+  await new Promise(resolve => window.setTimeout(resolve, 300));
+  button.classList.add('anim1');
+  await new Promise(resolve => window.setTimeout(resolve, 600));
+  button.classList.add('anim2');
+  await new Promise(resolve => window.setTimeout(resolve, 1600));
+  button.classList.add('logged-out');
+  const label = button.querySelector('.btn-text');
+  if (label) label.textContent = 'Logged Out';
+  return true;
 }
 document.addEventListener('click', async event => {
   const libraryDelete = event.target.closest('[data-library-delete]');
   if (libraryDelete) return deleteLibraryMaterial(libraryDelete.dataset.libraryDelete, libraryDelete);
   const libraryShare = event.target.closest('[data-library-share]');
   if (libraryShare) return shareLibraryMaterial(libraryShare.dataset.libraryShare, libraryShare);
-  const wipeApprove = event.target.closest('[data-system-wipe-approve]');
-  if (wipeApprove) return approveSystemWipe(wipeApprove.dataset.systemWipeApprove, wipeApprove);
-  const wipeCancel = event.target.closest('[data-system-wipe-cancel]');
-  if (wipeCancel) return cancelSystemWipe(wipeCancel.dataset.systemWipeCancel, wipeCancel);
   const certificateButton = event.target.closest('[data-send-certificate]');
   if (certificateButton) return sendStudentCertificate(certificateButton.dataset.sendCertificate, certificateButton);
   const nav = event.target.closest('[data-route]'); if (nav) {
@@ -1621,6 +2029,8 @@ document.addEventListener('click', async event => {
   const page = event.target.closest('[data-page]'); if (page) { state.filters.page = Math.max(1, state.filters.page + Number(page.dataset.page)); return renderStudents(); }
   const session = event.target.closest('[data-session]'); if (session) return toggleSession(session);
   const sessionEdit = event.target.closest('[data-session-edit]'); if (sessionEdit) return editSessionModal(sessionEdit.dataset.sessionEdit);
+  const userEdit = event.target.closest('[data-user-edit]'); if (userEdit) return editManagedUser(userEdit.dataset.userEdit);
+  const userDelete = event.target.closest('[data-user-delete]'); if (userDelete) return deleteManagedUser(userDelete.dataset.userDelete);
   const toggle = event.target.closest('[data-user-toggle]'); if (toggle) return userAction(toggle.dataset.userToggle, { active: toggle.dataset.active === '1' });
   const passwordButton = event.target.closest('[data-user-password]'); if (passwordButton) return resetUserPassword(passwordButton.dataset.userPassword);
   const permission = event.target.closest('[data-permission]'); if (permission) return userAction(permission.dataset.permission, { can_set_price: permission.checked });
@@ -1629,8 +2039,14 @@ document.addEventListener('click', async event => {
   if (action === 'toggle-password') return togglePassword(event.target.closest('[data-action="toggle-password"]'));
   if (action === 'open-mobile-drawer') return openMobileDrawer(); if (action === 'close-mobile-drawer') return closeMobileDrawer();
   if (action === 'toggle-theme') return toggleTheme();
+  if (action === 'toggle-sidebar') return toggleSidebar();
   if (action === 'print-report') { window.print(); return; }
-  if (action === 'logout') { closeMobileDrawer(false); return logout(); } if (action === 'refresh') return render(); if (action === 'scan') return startScan(); if (action === 'lookup') return lookup();
+  if (action === 'logout') {
+    const actionButton = event.target.closest('[data-action="logout"]');
+    if (!await animateLogout(actionButton)) return;
+    closeMobileDrawer(false);
+    return logout();
+  } if (action === 'refresh') return render(); if (action === 'scan') return startScan(); if (action === 'lookup') return lookup();
   if (action === 'show-student-qr') return showStudentQr(); if (action === 'close-student-qr') return closeStudentQr();
   if (action === 'payment') return paymentModal(); if (action === 'check-in') return checkIn(); if (action === 'download-qr') return downloadQr(); if (action === 'rotate-qr') return rotateQr();
   if (action === 'remind-payment') return openReminder(state.data.id);
@@ -1641,6 +2057,19 @@ document.addEventListener('click', async event => {
   if (action === 'another-student') { await renderAssistant(); return startScan(); }
   if (action === 'new-student') return studentModal(); if (action === 'edit-student') return studentModal(state.data); if (action === 'close-modal') return closeModal();
   if (action === 'change-password') return passwordModal();
+  if (action === 'manage-google-account') return manageGoogleAccount();
+  if (action === 'google-connect') return connectGoogleAccount();
+  if (action === 'google-disconnect') return disconnectGoogleAccount();
+});
+appRoot.addEventListener('input', event => {
+  const search = event.target.closest?.('.sidebar-search input');
+  if (!search) return;
+  const query = search.value.trim().toLowerCase();
+  appRoot.querySelectorAll('.sidebar .nav button').forEach(button => {
+    const label = button.querySelector('.nav-label')?.textContent?.toLowerCase() || '';
+    button.hidden = Boolean(query) && !label.includes(query);
+  });
+  appRoot.querySelectorAll('.sidebar .nav .divider').forEach(divider => { divider.hidden = Boolean(query); });
 });
 appRoot.addEventListener('change', event => {
   if (!event.target.matches('[data-action="scan-file"]')) return;
@@ -1661,22 +2090,48 @@ document.querySelector('#welcome-modal').addEventListener('click', event => {
   if (event.target.matches('[data-welcome-backdrop]') || event.target.closest('[data-welcome-close]')) closeWelcome();
 });
 document.addEventListener('keydown', event => { if (event.key === 'Escape') closeWelcome(); });
-window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-  try { if (!localStorage.getItem(themeStorageKey)) syncThemeControls(); } catch { syncThemeControls(); }
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', event => {
+  try {
+    if (localStorage.getItem(themeStorageKey)) return;
+    document.documentElement.dataset.theme = event.matches ? 'dark' : 'light';
+    syncThemeControls();
+  } catch { syncThemeControls(); }
 });
 syncThemeControls();
 async function boot() {
   const loadingStartedAt = performance.now();
+  const currentUrl = new URL(location.href);
+  const googleResult = currentUrl.searchParams.get('google');
+  currentUrl.searchParams.delete('google');
+  if (googleResult) history.replaceState(null, '', `${currentUrl.pathname}${currentUrl.search}${currentUrl.hash}`);
   try {
     const me = await api('/me'); state.user = me.user; state.csrf = me.csrf; state.today = me.today; await render();
-  } catch { renderLogin(); }
+  } catch {
+    const loginMessages = {
+      unlinked: 'حساب Google غير مرتبط بحساب في الكورس. سجّل الدخول باسم المستخدم وكلمة المرور اللذين استلمتهما من إدارة الكورس، ثم اربط Google من ملفك الشخصي.',
+      inactive: 'هذا الحساب غير نشط. تواصل مع إدارة الكورس.',
+      error: 'تعذر إكمال تسجيل الدخول بواسطة Google. حاول مرة أخرى.'
+    };
+    renderLogin(loginMessages[googleResult] || '');
+  }
+  if (state.user && googleResult) {
+    const messages = {
+      linked: 'تم ربط حساب Google بحسابك الحالي.',
+      connected: 'تم تسجيل الدخول إلى حسابك بواسطة Google.',
+      cancelled: 'تم إلغاء عملية Google.',
+      'already-linked': 'حساب Google هذا مرتبط بالفعل بحساب آخر.',
+      'already-connected': 'هذا الحساب مرتبط بحساب Google مختلف بالفعل.',
+      inactive: 'هذا الحساب غير نشط. تواصل مع إدارة الكورس.',
+      error: 'تعذر إكمال عملية Google. حاول مرة أخرى.'
+    };
+    if (messages[googleResult]) toast(messages[googleResult], ['error', 'inactive'].includes(googleResult));
+  }
   const remaining = Math.max(0, 2000 - (performance.now() - loadingStartedAt));
   if (remaining) await new Promise(resolve => window.setTimeout(resolve, remaining));
   await hideGlobalLoading();
   if (state.user?.id) {
     showWelcomeSplash(state.user.id);
-    // Initialize AI Chat after user is authenticated
-    import('./ai-chat.js').then(m => m.initializeAiChat()).catch(e => console.error('Failed to load AI Chat:', e));
+    initializeAiChat();
   }
 }
 boot();

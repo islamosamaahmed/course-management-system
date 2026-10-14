@@ -1,0 +1,13 @@
+=== repro started 2026-10-06T16:59:14.514Z ===
+2026-10-06T16:59:14.516Z STEP 1: /api/me (baseline)
+2026-10-06T16:59:14.616Z GET /api/me -> 200 in 92ms :: {"user":{"id":1,"name":"د. أحمد الألفي","username":"elalfy","role":"admin","can_set_price":false},"csrf":"fc96f1c68b1fd8733b55c754e7d236074f1648351f5f
+2026-10-06T16:59:14.619Z STEP 2: /api/system-reset/requests (THE page)
+2026-10-06T16:59:20.629Z GET /api/system-reset/requests -> AbortError: This operation was aborted in 6009ms
+2026-10-06T16:59:20.630Z STEP 3: /api/me again (is DB wedged?)
+2026-10-06T16:59:26.636Z GET /api/me -> AbortError: This operation was aborted in 6005ms
+2026-10-06T16:59:26.644Z STEP 4: /api/dashboard (other pages broken?)
+2026-10-06T16:59:32.653Z GET /api/dashboard -> AbortError: This operation was aborted in 6006ms
+2026-10-06T16:59:32.654Z STEP 5: wait 70s to check idle-timeout self-heal...
+2026-10-06T17:00:42.671Z STEP 6: /api/me after 70s
+2026-10-06T17:00:48.691Z GET /api/me -> AbortError: This operation was aborted in 6018ms
+2026-10-06T17:00:48.692Z === repro finished ===

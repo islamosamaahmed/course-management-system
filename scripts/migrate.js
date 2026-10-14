@@ -54,8 +54,13 @@ try {
   const existingMigration = await pool.query(
     "SELECT to_regclass('public.neon_data_migrations') AS table_name"
   );
-  const schemaVersions = new Set((await pool.query('SELECT version FROM schema_migrations')).rows.map(row => Number(row.version)));
-  const requiredVersions = [7, 8, 9, 10, 11, 12, 13, 14];
+  const existingSchema = await pool.query(
+    "SELECT to_regclass('public.schema_migrations') AS table_name"
+  );
+  const schemaVersions = new Set(existingSchema.rows[0].table_name
+    ? (await pool.query('SELECT version FROM schema_migrations')).rows.map(row => Number(row.version))
+    : []);
+  const requiredVersions = [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17];
   const pendingVersions = requiredVersions.filter(version => !schemaVersions.has(version));
   if (existingMigration.rows[0].table_name) {
     const migrated = await pool.query(
@@ -82,7 +87,10 @@ try {
           11: 'restore_known_staff_names',
           12: 'exam_certificates',
           13: 'ai_chat',
-          14: 'ai_pending_actions'
+          14: 'ai_pending_actions',
+          15: 'google_oauth',
+          16: 'permissions',
+          17: 'interactive_study'
         })[version]}.sql`), 'utf8');
         const statements = toPostgres(migration)
           .replace(/^\s*BEGIN\s*;\s*/i, '')
@@ -153,7 +161,7 @@ try {
       }
 
       const targetVersions = new Set((await client.query('SELECT version FROM schema_migrations')).rows.map(row => row.version));
-      for (const version of [7, 8, 9, 10, 11, 12, 13, 14]) {
+      for (const version of [7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17]) {
         if (targetVersions.has(version)) continue;
         const migration = await readFile(resolve(process.cwd(), 'migrations', `${String(version).padStart(4, '0')}_${({
           7: 'student_certificates',
@@ -163,7 +171,10 @@ try {
           11: 'restore_known_staff_names',
           12: 'exam_certificates',
           13: 'ai_chat',
-          14: 'ai_pending_actions'
+          14: 'ai_pending_actions',
+          15: 'google_oauth',
+          16: 'permissions',
+          17: 'interactive_study'
         })[version]}.sql`), 'utf8');
         const statements = toPostgres(migration)
           .replace(/^\s*BEGIN\s*;\s*/i, '')

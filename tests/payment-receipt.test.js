@@ -81,7 +81,6 @@ test('payment receipt endpoint downloads a PDF for authenticated staff', async (
           ? [{ ...user, token_hash: session.token_hash, csrf: session.csrf }]
           : [] };
       }
-      if (sql.includes("FROM system_wipe_requests") && sql.includes("status='processing'")) return { rows: [] };
       if (sql.includes('FROM payments p') && sql.includes('WHERE p.id=?')) {
         return { rows: payment.id === params[0] ? [{ ...payment }] : [] };
       }
@@ -281,7 +280,6 @@ test('payment API validates amounts and safely accepts idempotent retries', asyn
           ? [{ ...user, token_hash: session.token_hash, csrf: session.csrf }]
           : [] };
       }
-      if (sql.includes("FROM system_wipe_requests") && sql.includes("status='processing'")) return { rows: [] };
       if (sql.includes('pg_advisory_xact_lock')) {
         const key = params[0];
         const previous = lockTails.get(key) || Promise.resolve();

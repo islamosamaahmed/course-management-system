@@ -7,7 +7,7 @@ dotenv.config({ path: resolve(process.cwd(), '.env.local') });
 const db = openDatabase();
 const people = [
   ['د. أحمد رشاد', 'rashad', 'doctor'], ['د. تامر النشار', 'elnashar', 'doctor'],
-  ['د. أحمد الألفي', 'elalfy', 'doctor'], ['دنيا', 'donia', 'assistant']
+  ['د. أحمد الألفي', 'elalfy', 'doctor']
 ];
 
 try {

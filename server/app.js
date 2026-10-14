@@ -5,15 +5,17 @@ import QRCode from 'qrcode';
 import ExcelJS from 'exceljs';
 import { resolve } from 'node:path';
 import { randomInt } from 'node:crypto';
-import { openDatabase, transaction, audit, token, digest, passwordHash, passwordValid, today } from './db.js';
+import { openDatabase, transaction, audit, token, digest, passwordHash, passwordValid, today, withSystemDataLock } from './db.js';
 import { formatClockTime, sessionStartsAtUtc } from './session-reminders.js';
-import { registerAcademicRoutes } from './academic.js';
-import { registerSystemResetRoutes, withSystemDataLock } from './system-reset.js';
+import { deleteDoctorLibraryFiles, registerAcademicRoutes } from './academic.js';
+import { registerInteractiveStudyRoutes } from './interactive-study.js';
 import { registerAiAssistantRoutes } from './ai-assistant.js';
+import { registerGoogleAuthRoutes } from './google-auth.js';
 import { createDatabaseBackup, DatabaseBackupError, restoreDatabaseBackup } from './database-backup.js';
 import { dailyOperationsReport } from './daily-report.js';
 import { paymentReceiptHtml } from './receipt.js';
 import { renderPdf } from './pdf.js';
+import { defaultPermissions, effectivePermissions, hasPermission, permissionCatalog, routePermission } from './permissions.js';
 
 class HttpError extends Error { constructor(status, message) { super(message); this.status = status; } }
 const fail = (status, message) => { throw new HttpError(status, message); };
@@ -65,7 +67,17 @@ const studentCode = value => {
   const code = text(value, 'كود الطالب', 1, 32);
   if (!/^[a-zA-Z0-9_-]+$/.test(code)) fail(400, 'الكود: أرقام إنجليزية أو حروف أو - أو _'); return code;
 };
-const safeUser = user => ({ id: user.id, name: user.name, username: user.username, role: user.role, can_set_price: Boolean(user.can_set_price) });
+const safeUser = user => ({
+  id: user.id,
+  name: user.name,
+  fullName: user.name,
+  username: user.username,
+  role: user.role,
+  accountType: String(user.role).toUpperCase(),
+  status: user.active ? 'ACTIVE' : 'INACTIVE',
+  permissions: user.permissions || [],
+  can_set_price: Boolean(user.can_set_price)
+});
 const DEFAULT_ABSENCE_THRESHOLD = 25;
 const htmlEscape = value => String(value ?? '').replace(/[&<>"']/g, character => ({
   '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
@@ -120,8 +132,7 @@ function sendCertificateDocument(res, { pageTitle, eyebrow, title, studentName, 
   const scorePanel = score === undefined ? '' : `<div class="score-panel"><div class="score-item"><span>الدرجة</span><strong>${htmlEscape(score)}</strong></div><div class="score-divider"></div><div class="score-item"><span>النسبة</span><strong>${htmlEscape(percentage)}٪</strong></div></div>`;
   res.type('html').send(`<!doctype html><html lang="ar" dir="rtl"><head><meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1"><title>${htmlEscape(pageTitle)}</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+Arabic:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="/fonts.css" rel="stylesheet">
     <style>${certificateStyles}</style></head><body><main class="certificate"><div class="certificate-inner">
     <header class="certificate-header"><div class="brand-mark">S.T.C</div><div class="brand-copy">
     <strong>مركز السويس للتدريب</strong><span>SUEZ TRAINING CENTER</span></div>
@@ -144,9 +155,9 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
   app.disable('x-powered-by');
   if (process.env.TRUST_PROXY === '1') app.set('trust proxy', 1);
   app.use(helmet({ contentSecurityPolicy: { directives: {
-    defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
-    imgSrc: ["'self'", 'data:', 'blob:'], mediaSrc: ["'self'", 'blob:'], connectSrc: ["'self'", 'https://fonts.googleapis.com', 'https://fonts.gstatic.com'],
-    fontSrc: ["'self'", 'https://fonts.gstatic.com'], objectSrc: ["'none'"], frameAncestors: ["'none'"],
+    defaultSrc: ["'self'"], scriptSrc: ["'self'"], styleSrc: ["'self'", "'unsafe-inline'"],
+    imgSrc: ["'self'", 'data:', 'blob:'], mediaSrc: ["'self'", 'blob:'], connectSrc: ["'self'"],
+    fontSrc: ["'self'"], objectSrc: ["'none'"], frameAncestors: ["'none'"],
     upgradeInsecureRequests: secureCookies ? [] : null
   } }, strictTransportSecurity: secureCookies }));
   app.use(express.json({ limit: '24kb' }));
@@ -155,10 +166,35 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
   const dummyHash = passwordHash(token());
   const loginLimit = rateLimit({ windowMs: 15 * 60000, limit: 20, skipSuccessfulRequests: true, standardHeaders: 'draft-8', legacyHeaders: false, message: { error: 'محاولات كثيرة. حاول بعد 15 دقيقة' } });
   const cookie = (res, value, maxAge) => res.cookie('course_session', value, { httpOnly: true, secure: secureCookies, sameSite: 'strict', path: '/', maxAge });
-  const staff = (req, res, next) => { if (!['admin', 'doctor', 'assistant'].includes(req.user.role)) fail(403, 'غير مسموح لك بهذه العملية'); next(); };
-  const admin = (req, res, next) => { if (req.user.role !== 'admin') fail(403, 'هذه العملية للإدارة فقط'); next(); };
-  const operator = (req, res, next) => { if (req.user.role !== 'assistant') fail(403, 'هذه العملية التشغيلية متاحة لدنيا فقط'); next(); };
-  const doctorOrAdmin = (req, res, next) => { if (!['doctor', 'admin'].includes(req.user.role)) fail(403, 'هذه العملية متاحة للدكاترة فقط'); next(); };
+  const permissionOverrides = async userId => {
+    try {
+      const result = await db.query('SELECT permission_key,granted FROM user_permissions WHERE user_id=?', [userId]);
+      return Array.isArray(result?.rows) ? result.rows : [];
+    } catch (error) {
+      const message = String(error?.message || '');
+      if (/user_permissions|no such table|does not exist|missing table|relation .* does not exist|unknown table/i.test(message)) return [];
+      throw error;
+    }
+  };
+  const getPermissions = async user => effectivePermissions(user.role, await permissionOverrides(user.id));
+  const routeKey = req => routePermission(
+    req.originalUrl.split('?')[0],
+    req.method,
+    { ...req.query, ...(req.body && typeof req.body === 'object' && !Buffer.isBuffer(req.body) ? req.body : {}) },
+    req.user?.role
+  );
+  const legacyGate = (req, fallback) => {
+    const key = routeKey(req);
+    if (key) {
+      if (!hasPermission(req.user, key)) fail(403, 'ليست لديك الصلاحية المطلوبة');
+      return;
+    }
+    if (!fallback) fail(403, 'غير مسموح لك بهذه العملية');
+  };
+  const staff = (req, res, next) => { legacyGate(req, ['admin', 'doctor', 'assistant'].includes(req.user.role)); next(); };
+  const admin = (req, res, next) => { legacyGate(req, req.user.role === 'admin'); next(); };
+  const operator = (req, res, next) => { legacyGate(req, req.user.role === 'assistant'); next(); };
+  const doctorOrAdmin = (req, res, next) => { legacyGate(req, ['doctor', 'admin'].includes(req.user.role)); next(); };
   let settingsCache;
   const courseSettings = async () => settingsCache || (settingsCache =
     (await db.query('SELECT * FROM course_settings WHERE id=1', [])).rows[0] ||
@@ -184,7 +220,9 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
   };
   const owned = async (req, id) => {
     const row = await studentRow(id);
-    if (req.user.role === 'student' && row.user_id !== req.user.id) fail(403, 'لا يمكنك مشاهدة بيانات طالب آخر');
+    if (req.user.role === 'student' && row.user_id !== req.user.id && !hasPermission(req.user, 'STUDENTS_VIEW')) {
+      fail(403, 'لا يمكنك مشاهدة بيانات طالب آخر');
+    }
     return row;
   };
   const history = async (studentId, cutoff = today()) => await (await db.query(`
@@ -210,6 +248,55 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
   const detail = async row => ({ ...await summarize(row), payments: await (await db.query(`
     SELECT p.*,u.name recorded_by_name,v.name voided_by_name FROM payments p JOIN users u ON u.id=p.recorded_by
     LEFT JOIN users v ON v.id=p.voided_by WHERE p.student_id=? ORDER BY p.created_at DESC,p.id DESC`, [row.id])).rows, attendance: await courseStarted() ? await history(row.id) : [] });
+  const protectStudentData = (req, student, data, { doctorFollowUp = false } = {}) => {
+    const isOwnProfile = req.user.role === 'student' && student.user_id === req.user.id;
+    const canViewScopedAttendance = doctorFollowUp && req.user.role === 'doctor' &&
+      hasPermission(req.user, 'DOCTOR_STUDENTS_VIEW');
+    const safe = { ...data };
+    if (!isOwnProfile && !hasPermission(req.user, 'PAYMENTS_VIEW')) {
+      delete safe.payments;
+      delete safe.paid;
+      delete safe.remaining;
+      delete safe.price;
+      delete safe.course_price_snapshot;
+      delete safe.booking_status;
+    }
+    if (!isOwnProfile && !hasPermission(req.user, 'ATTENDANCE_VIEW') && !canViewScopedAttendance) {
+      delete safe.attendance;
+      delete safe.present;
+      delete safe.absent;
+      delete safe.total_sessions;
+      delete safe.percentage;
+    }
+    return safe;
+  };
+  const validatePermissions = value => {
+    if (!Array.isArray(value) || value.some(key => typeof key !== 'string')) fail(400, 'قائمة الصلاحيات غير صحيحة');
+    const keys = new Set(permissionCatalog.map(permission => permission.key));
+    if (value.some(key => !keys.has(key))) fail(400, 'تتضمن قائمة الصلاحيات صلاحية غير معروفة');
+    return new Set(value);
+  };
+  const saveUserPermissions = async (userId, selected, actor) => {
+    const previous = await getPermissions({
+      id: userId,
+      role: (await db.query('SELECT role FROM users WHERE id=?', [userId])).rows[0]?.role
+    });
+    for (const permission of permissionCatalog) {
+      await db.query(`INSERT INTO user_permissions(user_id,permission_key,granted,updated_by)
+        VALUES(?,?,?,?) ON CONFLICT(user_id,permission_key) DO UPDATE SET
+        granted=excluded.granted,updated_by=excluded.updated_by,
+        updated_at=to_char(clock_timestamp() AT TIME ZONE 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"')`,
+      [userId, permission.key, selected.has(permission.key), actor.id]);
+    }
+    const added = [...selected].filter(key => !previous.includes(key));
+    const removed = previous.filter(key => !selected.has(key));
+    await audit(db, actor, 'تعديل صلاحيات المستخدم', 'user', userId, { added, removed });
+  };
+  const accountType = value => {
+    const normalized = typeof value === 'string' ? value.toLowerCase() : '';
+    if (!['admin', 'doctor', 'assistant', 'student'].includes(normalized)) fail(400, 'نوع الحساب غير صحيح');
+    return normalized;
+  };
   const groupCheck = async (levelId, groupId) => { if (!await (await db.query('SELECT id FROM groups_table WHERE id=? AND level_id=?', [groupId, levelId])).rows[0]) fail(400, 'المجموعة لا تتبع الفرقة المحددة'); };
 
   app.post('/api/login', loginLimit, async (req, res) => {
@@ -219,6 +306,7 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
     const user = await (await db.query('SELECT * FROM users WHERE username=?', [name])).rows[0];
     const valid = passwordValid(pass, user?.password_hash || dummyHash);
     if (!valid || !user?.active) fail(401, 'اسم الدخول أو كلمة المرور غير صحيحة، أو الحساب معطّل');
+    user.permissions = await getPermissions(user);
     const raw = token(), csrf = token();
     await transaction(db, async () => {
       await db.query('DELETE FROM auth_sessions WHERE expires_at<?', [Date.now()]);
@@ -234,16 +322,23 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
     const session = await (await db.query(`SELECT a.csrf,a.token_hash,u.* FROM auth_sessions a JOIN users u ON u.id=a.user_id
       WHERE a.token_hash=? AND a.expires_at>? AND u.active=1`, [digest(raw), Date.now()])).rows[0];
     if (!session) fail(401, 'انتهت الجلسة أو تم تعطيل الحساب؛ سجّل الدخول');
+    session.permissions = await getPermissions(session);
     req.user = session;
     if (!['GET', 'HEAD', 'OPTIONS'].includes(req.method) && req.headers['x-csrf-token'] !== session.csrf) fail(403, 'تعذر التحقق من أمان الطلب. أعد تحميل الصفحة');
-    const resetInProgress = (await db.query(`SELECT 1 FROM system_wipe_requests
-      WHERE status='processing' LIMIT 1`)).rows[0];
-    if (resetInProgress && !(req.method === 'GET' && req.path === '/system-reset/requests')) {
-      return res.status(423).json({ error: 'مسح البيانات قيد التنفيذ؛ انتظر قليلًا ثم حدّث الصفحة' });
-    }
+    const requiredPermission = routeKey(req);
+    if (requiredPermission && !hasPermission(session, requiredPermission)) fail(403, 'ليست لديك الصلاحية المطلوبة');
     next();
   });
   app.get('/api/me', (req, res) => res.json({ user: safeUser(req.user), csrf: req.user.csrf, today: today() }));
+  const authenticated = (req, res, next) => {
+    if (!req.user) return res.status(401).json({ error: 'يرجى تسجيل الدخول' });
+    next();
+  };
+  registerGoogleAuthRoutes(app, db, {
+    authenticated,
+    loginLimit,
+    setSessionCookie: cookie
+  });
   app.get('/api/backup', admin, async (req, res, next) => {
     let snapshot;
     try {
@@ -475,10 +570,19 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
     return await (await db.query(`SELECT COUNT(*) total FROM students s JOIN levels l ON l.id=s.level_id
       JOIN groups_table g ON g.id=s.group_id JOIN users u ON u.id=s.user_id WHERE ${where}`, [...args])).rows[0].total;
   };
-  const followUpData = async (query, paging = { size: 20, offset: 0 }) => {
+  const followUpData = async (query, paging = { size: 20, offset: 0 }, doctorId = null) => {
     const threshold = query.absence_threshold === undefined ? DEFAULT_ABSENCE_THRESHOLD : Number(query.absence_threshold);
     if (!Number.isInteger(threshold) || threshold < 1 || threshold > 100) fail(400, 'حد الغياب يجب أن يكون بين 1 و100');
-    const started = await courseStarted(), { where, args } = studentFilter({ ...query, active: '1', booking_cancelled: '0' });
+    const started = await courseStarted(), filtered = studentFilter({ ...query, active: '1', booking_cancelled: '0' });
+    const where = doctorId
+      ? `${filtered.where} AND EXISTS (
+        SELECT 1 FROM course_lectures cl JOIN enrollments en ON en.student_id=s.id
+          AND en.group_id=cl.group_id AND en.starts_on<=cl.lecture_date
+          AND (en.ends_on IS NULL OR en.ends_on>cl.lecture_date)
+        WHERE cl.doctor_id=? AND cl.status<>'cancelled'
+      )`
+      : filtered.where;
+    const args = doctorId ? [...filtered.args, doctorId] : filtered.args;
     const sessionCte = started ? `session_totals AS (
       SELECT e.student_id,COUNT(cs.id) total_sessions,
         SUM(CASE WHEN a.id IS NOT NULL THEN 1 ELSE 0 END) present,
@@ -496,6 +600,14 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
       WHERE cs.cancelled=0 AND cs.date<=?
     ),` : `session_totals AS (SELECT NULL::INTEGER student_id,0 total_sessions,0 present,NULL::TEXT last_attendance WHERE FALSE),
       recent_sessions AS (SELECT NULL::INTEGER student_id,NULL::TEXT date,NULL::INTEGER attendance_id,0 position WHERE FALSE),`;
+    const categories = [
+      doctorId ? null : `SELECT 'more_than_half' kind,b.* FROM base b WHERE b.price>0 AND b.remaining>b.price/2`,
+      `SELECT 'high_absence' kind,b.* FROM base b
+        WHERE ${started ? `b.total_sessions>0 AND 100.0*b.absent/b.total_sessions>=${threshold}` : 'FALSE'}`,
+      `SELECT 'missed_last_two' kind,b.* FROM base b
+        WHERE ${started ? 'b.second_session_date IS NOT NULL AND b.last_session_attendance_id IS NULL AND b.second_session_attendance_id IS NULL' : 'FALSE'}`,
+      doctorId ? null : `SELECT 'no_payment',b.* FROM base b WHERE b.paid=0`
+    ].filter(Boolean).join('\n        UNION ALL ');
     const commonCtes = `WITH payment_totals AS (
         SELECT student_id,SUM(amount) paid FROM payments WHERE voided_at IS NULL GROUP BY student_id
       ), ${sessionCte}
@@ -521,14 +633,7 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
         LEFT JOIN latest_reminders lr ON lr.student_id=s.id AND lr.position=1
         LEFT JOIN recent_sessions rs1 ON rs1.student_id=s.id AND rs1.position=1
         LEFT JOIN recent_sessions rs2 ON rs2.student_id=s.id AND rs2.position=2 WHERE ${where}
-      ), categories AS (
-        SELECT 'more_than_half' kind,b.* FROM base b WHERE b.price>0 AND b.remaining>b.price/2
-        UNION ALL SELECT 'high_absence',b.* FROM base b
-          WHERE ${started ? `b.total_sessions>0 AND 100.0*b.absent/b.total_sessions>=${threshold}` : 'FALSE'}
-        UNION ALL SELECT 'missed_last_two',b.* FROM base b
-          WHERE ${started ? 'b.second_session_date IS NOT NULL AND b.last_session_attendance_id IS NULL AND b.second_session_attendance_id IS NULL' : 'FALSE'}
-        UNION ALL SELECT 'no_payment',b.* FROM base b WHERE b.paid=0
-      )`;
+      ), categories AS (${categories})`;
     const bind = [...(started ? [today(), today()] : []), ...args];
     const countRows = await (await db.query(`${commonCtes} SELECT kind,COUNT(*) total FROM categories GROUP BY kind`, [...bind])).rows;
     const counts = { more_than_half: 0, high_absence: 0, missed_last_two: 0, no_payment: 0 };
@@ -558,8 +663,11 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
   };
   app.get('/api/follow-up', staff, async (req, res) => {
     const page = integer(req.query.page || 1), size = Math.min(integer(req.query.size || 20), 100);
-    const data = await followUpData(req.query, { size, offset: (page - 1) * size });
-    res.json({ ...data, list_totals: data.counts, page, size });
+    const isDoctor = req.user.role === 'doctor';
+    const data = await followUpData(req.query, { size, offset: (page - 1) * size }, isDoctor ? req.user.id : null);
+    const lists = Object.fromEntries(Object.entries(data.lists).map(([key, students]) =>
+      [key, students.map(student => protectStudentData(req, student, student, { doctorFollowUp: isDoctor }))]));
+    res.json({ ...data, lists, list_totals: data.counts, page, size });
   });
   app.post('/api/notifications/payment-reminder', operator, async (req, res) => {
     fields(req.body, ['student_id', 'message']);
@@ -581,14 +689,17 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
   app.get('/api/students', staff, async (req, res) => {
     const page = integer(req.query.page || 1), size = Math.min(integer(req.query.size || 20), 100);
     const rows = await filteredStudents(req.query, { size, offset: (page - 1) * size });
-    res.json({ items: await Promise.all(rows.map(summarize)), total: await countFilteredStudents(req.query), page, size });
+    const items = await Promise.all(rows.map(summarize));
+    res.json({ items: items.map((student, index) => protectStudentData(req, rows[index], student)),
+      total: await countFilteredStudents(req.query), page, size });
   });
   app.get('/api/students/lookup', staff, async (req, res) => {
     let row;
     if (req.query.token) row = await (await db.query('SELECT id FROM students WHERE qr_token=? AND active=1 AND cancelled_at IS NULL', [text(req.query.token, 'QR', 64, 64)])).rows[0];
     else row = await (await db.query('SELECT id FROM students WHERE code=? AND active=1 AND cancelled_at IS NULL', [studentCode(req.query.code)])).rows[0];
     if (!row) fail(404, 'لم يتم العثور على طالب نشط وغير ملغي بهذا الكود أو QR');
-    res.json(await detail(await studentRow(row.id)));
+    const student = await studentRow(row.id);
+    res.json(protectStudentData(req, student, await detail(student)));
   });
   app.post('/api/students', operator, async (req, res) => {
     fields(req.body, ['name', 'code', 'level_id', 'group_id', 'phone', 'price', 'username', 'password',
@@ -626,9 +737,14 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
           { student_id: sid, name, remaining, source: 'booking' });
       }
       return sid;
-    }); res.status(201).json(await detail(await studentRow(id)));
+    });
+    const student = await studentRow(id);
+    res.status(201).json(protectStudentData(req, student, await detail(student)));
   });
-  app.get('/api/students/:id', async (req, res) => res.json(await detail(await owned(req, integer(req.params.id)))));
+  app.get('/api/students/:id', async (req, res) => {
+    const student = await owned(req, integer(req.params.id));
+    res.json(protectStudentData(req, student, await detail(student)));
+  });
   app.get('/api/students/:id/qr', async (req, res) => {
     const s = await owned(req, integer(req.params.id));
     res.set('Content-Type', 'image/png').send(await QRCode.toBuffer(`course:${s.qr_token}`, { width: 600, margin: 3, errorCorrectionLevel: 'M' }));
@@ -800,7 +916,7 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
     if (s.cancelled_at) fail(400, 'الحجز ملغي ولا يمكن تسجيل الحضور');
     const session = await (await db.query('SELECT * FROM course_sessions WHERE id=? AND cancelled=0', [integer(req.body.session_id)])).rows[0];
     if (!session || session.date > today()) fail(400, 'المحاضرة غير موجودة أو ملغاة أو لم يحن موعدها');
-    if (req.user.role === 'assistant' && session.date !== today()) fail(403, 'دنيا تستطيع تسجيل حضور اليوم فقط؛ التصحيح للأيام السابقة للإدارة');
+    if (req.user.role === 'assistant' && session.date !== today()) fail(403, 'يمكن للمساعد تسجيل حضور اليوم فقط؛ التصحيح للأيام السابقة متاح للإدارة');
     if (!await (await db.query('SELECT id FROM enrollments WHERE student_id=? AND group_id=? AND starts_on<=? AND (ends_on IS NULL OR ends_on>?)', [s.id, session.group_id, session.date, session.date])).rows[0]) fail(400, 'الطالب غير مسجل في مجموعة هذه المحاضرة بتاريخها');
     const id = await transaction(db, async () => {
       if (await (await db.query('SELECT id FROM attendance WHERE student_id=? AND session_id=?', [s.id, session.id])).rows[0]) fail(409, 'تم تسجيل حضور هذا الطالب اليوم بالفعل ✓');
@@ -888,7 +1004,7 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
   });
 
   registerAcademicRoutes(app, db);
-  registerSystemResetRoutes(app, db, { onComplete: () => { settingsCache = undefined; } });
+  registerInteractiveStudyRoutes(app, db);
   registerAiAssistantRoutes(app, db);
 
   app.get('/api/dashboard', staff, async (req, res) => {
@@ -936,18 +1052,164 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
       follow_up: await (await followUpData({})).counts, levels });
   });
 
-  app.get('/api/users', admin, async (req, res) => res.json(await (await db.query("SELECT id,name,username,role,active,can_set_price FROM users WHERE role<>'student'", [])).rows));
-  app.patch('/api/users/:id', operator, async (req, res) => {
-    fields(req.body, ['active', 'password', 'can_set_price']); const id = integer(req.params.id), u = await (await db.query("SELECT * FROM users WHERE id=? AND role='assistant'", [id])).rows[0];
-    if (!u) fail(400, 'هذه الشاشة لإدارة حساب المساعدة فقط');
-    if (u.id === req.user.id) fail(403, 'لا يمكنك تعديل حسابك من هذه الشاشة');
-    const active = req.body.active === undefined ? u.active : bool(req.body.active), permission = req.body.can_set_price === undefined ? u.can_set_price : bool(req.body.can_set_price);
-    const hash = req.body.password === undefined ? u.password_hash : passwordHash(password(req.body.password));
+  app.get('/api/permissions', admin, (req, res) => res.json({
+    items: permissionCatalog,
+    defaults: Object.fromEntries(['admin', 'doctor', 'assistant', 'student'].map(role => [role, defaultPermissions(role)]))
+  }));
+  app.get('/api/users', admin, async (req, res) => res.json(await (await db.query(`SELECT u.id,u.name,u.username,u.role,u.active,u.can_set_price,
+      s.id student_id,s.code,s.level_id,s.group_id
+    FROM users u LEFT JOIN students s ON s.user_id=u.id ORDER BY u.id`, [])).rows));
+  app.post('/api/users', admin, async (req, res) => {
+    fields(req.body, ['name', 'username', 'password', 'role', 'active', 'permissions', 'code', 'level_id', 'group_id', 'phone']);
+    const name = text(req.body.name, 'الاسم الكامل', 2, 120);
+    const login = username(req.body.username);
+    const hash = passwordHash(password(req.body.password));
+    const role = accountType(req.body.role);
+    const active = req.body.active === undefined ? 1 : bool(req.body.active);
+    const selected = validatePermissions(req.body.permissions || []);
+    const code = role === 'student' ? studentCode(req.body.code) : null;
+    const level = role === 'student' ? integer(req.body.level_id, 'الفرقة') : null;
+    const group = role === 'student' ? integer(req.body.group_id, 'المجموعة') : null;
+    const phone = role === 'student' && req.body.phone ? text(req.body.phone, 'الهاتف', 5, 24) : '';
+    let studentPrice = null;
+    if (role === 'student') {
+      await groupCheck(level, group);
+      if (!await courseStarted()) await ensureBookingOpen();
+      const priceRow = await (await db.query('SELECT price FROM level_course_prices WHERE level_id=?', [level])).rows[0];
+      if (!priceRow || priceRow.price <= 0) fail(409, 'اضبط سعر الكورس لهذه الفرقة من الإعدادات قبل إنشاء حساب الطالب');
+      studentPrice = priceRow.price;
+    }
+    const id = await transaction(db, async () => {
+      if (await (await db.query('SELECT id FROM users WHERE LOWER(username)=LOWER(?)', [login])).rows[0]) fail(409, 'اسم الدخول مستخدم بالفعل');
+      if (role === 'student' && await (await db.query('SELECT id FROM students WHERE code=?', [code])).rows[0]) fail(409, 'كود الطالب مستخدم بالفعل');
+      const userId = Number((await db.query('INSERT INTO users(name,username,password_hash,role,active) VALUES(?,?,?,?,?)',
+        [name, login, hash, role, active])).lastInsertRowid);
+      if (role === 'student') {
+        const studentId = Number((await db.query(`INSERT INTO students(user_id,code,name,phone,level_id,group_id,price,course_price_snapshot,qr_token,enrolled_on)
+          VALUES(?,?,?,?,?,?,?,?,?,?)`, [userId, code, name, phone, level, group, studentPrice, studentPrice, token(), today()])).lastInsertRowid);
+        await db.query('INSERT INTO enrollments(student_id,group_id,starts_on) VALUES(?,?,?)', [studentId, group, today()]);
+        await audit(db, req.user, 'إنشاء حساب طالب', 'student', studentId, { user_id: userId, name, username: login, code, level, group });
+      } else {
+        await audit(db, req.user, 'إنشاء حساب مستخدم', 'user', userId, { name, username: login, role });
+      }
+      await saveUserPermissions(userId, selected, req.user);
+      return userId;
+    });
+    res.status(201).json({ id, name, username: login, role, active: Boolean(active), permissions: [...selected] });
+  });
+  app.patch('/api/users/:id', admin, async (req, res) => {
+    fields(req.body, ['name', 'username', 'role', 'active', 'password', 'can_set_price', 'code', 'level_id', 'group_id', 'phone']);
+    const id = integer(req.params.id), user = (await db.query('SELECT * FROM users WHERE id=?', [id])).rows[0];
+    if (!user) fail(404, 'المستخدم غير موجود');
+    if (user.id === req.user.id) fail(403, 'لا يمكنك تعديل حسابك من هذه الشاشة');
+    if (req.body.active !== undefined && !hasPermission(req.user, 'USERS_DISABLE')) fail(403, 'ليست لديك صلاحية تعطيل الحسابات');
+    if (['name', 'username', 'role', 'password'].some(key => req.body[key] !== undefined) &&
+        !hasPermission(req.user, 'USERS_EDIT')) fail(403, 'ليست لديك صلاحية تعديل الحسابات');
+    const name = req.body.name === undefined ? user.name : text(req.body.name, 'الاسم الكامل', 2, 120);
+    const login = req.body.username === undefined ? user.username : username(req.body.username);
+    const role = req.body.role === undefined ? user.role : accountType(req.body.role);
+    const active = req.body.active === undefined ? user.active : bool(req.body.active);
+    const hash = req.body.password === undefined ? user.password_hash : passwordHash(password(req.body.password));
+    const student = (await db.query('SELECT * FROM students WHERE user_id=?', [id])).rows[0] || null;
+    const roleChanged = role !== user.role;
+    let studentDetails = null;
+    if (role === 'student' && !student && !roleChanged) {
+      fail(409, 'حساب الطالب لا يحتوي على ملف طالب؛ غيّر نوع الحساب ثم أعد اختياره وأدخل بيانات الطالب');
+    }
+    if (role === 'student' && !student) {
+      const code = studentCode(req.body.code);
+      const level = integer(req.body.level_id, 'الفرقة');
+      const group = integer(req.body.group_id, 'المجموعة');
+      const phone = req.body.phone ? text(req.body.phone, 'الهاتف', 5, 24) : '';
+      await groupCheck(level, group);
+      if (!await courseStarted()) await ensureBookingOpen();
+      const priceRow = (await db.query('SELECT price FROM level_course_prices WHERE level_id=?', [level])).rows[0];
+      if (!priceRow || priceRow.price <= 0) fail(409, 'اضبط سعر الكورس لهذه الفرقة من الإعدادات قبل تحويل الحساب إلى طالب');
+      if (await (await db.query('SELECT id FROM students WHERE code=?', [code])).rows[0]) fail(409, 'كود الطالب مستخدم بالفعل');
+      studentDetails = { code, level, group, phone, price: priceRow.price };
+    } else if (role !== 'student' && student) {
+      const historicalRecord = (await db.query(`SELECT 1 FROM attendance WHERE student_id=?
+        UNION ALL SELECT 1 FROM payments WHERE student_id=?
+        UNION ALL SELECT 1 FROM exam_attempts WHERE student_id=?
+        UNION ALL SELECT 1 FROM study_lesson_progress WHERE student_id=?
+        UNION ALL SELECT 1 FROM study_question_attempts WHERE student_id=?
+        UNION ALL SELECT 1 FROM certificates WHERE student_id=?
+        UNION ALL SELECT 1 FROM exam_certificates WHERE student_id=? LIMIT 1`,
+      [student.id, student.id, student.id, student.id, student.id, student.id, student.id])).rows[0];
+      if (historicalRecord) fail(409, 'لا يمكن تغيير نوع حساب طالب له سجلات دراسية أو مالية؛ عطّل الحساب للحفاظ عليها');
+    }
+    if (roleChanged && ['doctor', 'admin'].includes(user.role) && !['doctor', 'admin'].includes(role) &&
+        (await db.query(`SELECT id FROM subjects WHERE doctor_id=?
+          UNION ALL SELECT id FROM course_sessions WHERE doctor_id=? LIMIT 1`, [id, id])).rows[0]) {
+      fail(409, 'لا يمكن تحويل نوع الحساب مع وجود مواد أو محاضرات مرتبطة به؛ انقل المحتوى أو احذف الحساب ومحتواه');
+    }
+    if (login.toLowerCase() !== user.username.toLowerCase() &&
+        await (await db.query('SELECT id FROM users WHERE LOWER(username)=LOWER(?) AND id<>?', [login, id])).rows[0]) fail(409, 'اسم الدخول مستخدم بالفعل');
     await transaction(db, async () => {
-      await db.query('UPDATE users SET active=?,can_set_price=?,password_hash=? WHERE id=?', [active, permission, hash, id]);
-      await db.query('DELETE FROM auth_sessions WHERE user_id=?', [id]);
-      await audit(db, req.user, 'تحديث حساب المساعدة', 'user', id, { active, can_set_price: permission, password_reset: req.body.password !== undefined });
-    }); res.json({ ok: true });
+      await db.query('UPDATE users SET name=?,username=?,role=?,active=?,password_hash=?,can_set_price=? WHERE id=?',
+        [name, login, role, active, hash, req.body.can_set_price === undefined ? user.can_set_price : bool(req.body.can_set_price), id]);
+      if (student && role !== 'student') await db.query('DELETE FROM students WHERE id=?', [student.id]);
+      if (role === 'student' && student) await db.query('UPDATE students SET name=? WHERE id=?', [name, student.id]);
+      if (studentDetails) {
+        const studentId = Number((await db.query(`INSERT INTO students(user_id,code,name,phone,level_id,group_id,price,
+          course_price_snapshot,qr_token,enrolled_on,active) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,
+        [id, studentDetails.code, name, studentDetails.phone, studentDetails.level, studentDetails.group,
+          studentDetails.price, studentDetails.price, token(), today(), active])).lastInsertRowid);
+        await db.query('INSERT INTO enrollments(student_id,group_id,starts_on) VALUES(?,?,?)',
+          [studentId, studentDetails.group, today()]);
+      }
+      if (active !== user.active || hash !== user.password_hash || login !== user.username || roleChanged) {
+        await db.query('DELETE FROM auth_sessions WHERE user_id=?', [id]);
+      }
+      await audit(db, req.user, 'تحديث حساب مستخدم', 'user', id, {
+        before: { name: user.name, username: user.username, role: user.role, active: user.active },
+        after: { name, username: login, role, active },
+        student: studentDetails ? { code: studentDetails.code, level: studentDetails.level, group: studentDetails.group } : undefined,
+        password_reset: req.body.password !== undefined
+      });
+      if (roleChanged) await saveUserPermissions(id, new Set(defaultPermissions(role)), req.user);
+    });
+    res.json({ ok: true });
+  });
+  app.delete('/api/users/:id', admin, async (req, res) => {
+    const id = integer(req.params.id), user = (await db.query('SELECT * FROM users WHERE id=?', [id])).rows[0];
+    if (!user) fail(404, 'المستخدم غير موجود');
+    if (user.id === req.user.id) fail(403, 'لا يمكنك حذف حسابك الحالي');
+    const student = (await db.query('SELECT id,code,name FROM students WHERE user_id=?', [id])).rows[0] || null;
+    if (student) {
+      const historicalRecord = (await db.query(`SELECT 1 FROM attendance WHERE student_id=?
+        UNION ALL SELECT 1 FROM payments WHERE student_id=?
+        UNION ALL SELECT 1 FROM exam_attempts WHERE student_id=? LIMIT 1`, [student.id, student.id, student.id])).rows[0];
+      if (historicalRecord) fail(409, 'للحساب سجلات حضور أو مدفوعات أو محاولات اختبارات؛ عطّل الحساب للحفاظ على السجلات');
+    }
+    const ownedExamsWithAttempts = (await db.query(`SELECT 1 FROM exam_attempts ea
+      JOIN exams e ON e.id=ea.exam_id WHERE e.doctor_id=? LIMIT 1`, [id])).rows[0];
+    if (ownedExamsWithAttempts) fail(409, 'للدكتور نتائج اختبارات محفوظة؛ لا يمكن حذف الحساب ومحتواه حفاظًا على النتائج');
+    await deleteDoctorLibraryFiles(db, id);
+    await transaction(db, async () => {
+      await db.query('DELETE FROM study_units WHERE subject_id IN (SELECT id FROM subjects WHERE doctor_id=?)', [id]);
+      await db.query('DELETE FROM course_materials WHERE subject_id IN (SELECT id FROM subjects WHERE doctor_id=?)', [id]);
+      await audit(db, req.user, 'حذف حساب مستخدم نهائيًا', 'user', id, {
+        name: user.name, username: user.username, role: user.role,
+        student_code: student?.code || null
+      });
+      if (student) await db.query('DELETE FROM students WHERE id=?', [student.id]);
+      await db.query('DELETE FROM users WHERE id=?', [id]);
+    });
+    res.json({ ok: true });
+  });
+  app.get('/api/users/:id/permissions', admin, async (req, res) => {
+    const id = integer(req.params.id), user = (await db.query('SELECT id,role FROM users WHERE id=?', [id])).rows[0];
+    if (!user) fail(404, 'المستخدم غير موجود');
+    res.json({ permissions: await getPermissions(user) });
+  });
+  app.put('/api/users/:id/permissions', admin, async (req, res) => {
+    fields(req.body, ['permissions']);
+    const id = integer(req.params.id), user = (await db.query('SELECT id,role FROM users WHERE id=?', [req.params.id])).rows[0];
+    if (!user) fail(404, 'المستخدم غير موجود');
+    const selected = validatePermissions(req.body.permissions);
+    await transaction(db, async () => saveUserPermissions(id, selected, req.user));
+    res.json({ permissions: [...selected] });
   });
   app.patch('/api/course', operator, async (req, res) => {
     fields(req.body, ['name', 'price']); const name = text(req.body.name, 'اسم الكورس', 2), price = money(req.body.price);
@@ -978,6 +1240,9 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
   });
   app.delete('/api/structure/:type/:id', operator, async (req, res) => {
     const table = { levels: 'levels', groups: 'groups_table' }[req.params.type]; if (!table) fail(404, 'غير موجود'); const id = integer(req.params.id);
+    if (req.params.type === 'groups' && (await db.query('SELECT id FROM study_lessons WHERE group_id=? LIMIT 1', [id])).rows[0]) {
+      fail(409, 'لا يمكن حذف مجموعة لها دروس منشورة أو مسودات للمذاكرة التفاعلية');
+    }
     await transaction(db, async () => {
       if (!await (await db.query(`DELETE FROM ${table} WHERE id=?`, [id])).changes) fail(404, 'غير موجود');
       await audit(db, req.user, 'حذف فرقة أو مجموعة غير مستخدمة', req.params.type, id);
@@ -1058,6 +1323,7 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
   });
   app.use('/api', (req, res) => res.status(404).json({ error: 'المسار غير موجود' }));
   app.use('/vendor/flatpickr', express.static(resolve('node_modules/flatpickr/dist'), { etag: true }));
+  app.use('/vendor/fonts', express.static(resolve('node_modules/@fontsource/ibm-plex-sans-arabic/files'), { etag: true, maxAge: '1y', immutable: true }));
   app.get('/vendor/qr-scanner.js', (req, res) => res.sendFile(resolve('node_modules/html5-qrcode/html5-qrcode.min.js')));
   app.get('/favicon.ico', (req, res) => res.sendFile(resolve('public/favicon.ico')));
   app.get('/favicon.svg', (req, res) => res.sendFile(resolve('public/favicon.svg')));
@@ -1067,7 +1333,11 @@ export function createApp({ db = openDatabase(), secureCookies = process.env.NOD
   app.use((error, req, res, next) => {
     if (res.headersSent) return next(error);
     let status = error.status || 500, message = error.message;
-    if (status === 413) message = 'حجم ملف النسخة يتجاوز الحد المسموح (100 ميجابايت).';
+    if (status === 413) {
+      message = req.path.startsWith('/academic/library/upload/')
+        ? 'حجم الملف يجب ألا يتجاوز 20 ميجابايت.'
+        : 'حجم ملف النسخة يتجاوز الحد المسموح (100 ميجابايت).';
+    }
     if (error.code?.startsWith('ERR_SQLITE')) {
       if (message.includes('UNIQUE constraint')) { status = 409; message = 'هذه البيانات مسجلة بالفعل'; }
       else if (message.includes('FOREIGN KEY constraint')) { status = 409; message = 'السجل مرتبط ببيانات أخرى ولا يمكن حذفه أو استخدامه بهذه الطريقة'; }

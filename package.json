@@ -8,13 +8,16 @@
   },
   "scripts": {
     "start": "node server/index.js",
+    "dev:local": "node scripts/dev-local.js",
     "db:local": "node scripts/local-postgres.js",
+    "data:sync-local": "node scripts/sync-local-data.js",
     "setup": "node scripts/setup.js",
     "storage:setup": "node scripts/setup-course-library-storage.js",
     "test": "node --test",
     "db:migrate": "node scripts/migrate.js",
     "db:upgrade": "node scripts/db-upgrade.js",
-    "check": "node --check server/app.js && node --check server/db.js && node --check server/ai-assistant.js && node --check server/academic.js && node --check server/share-links.js && node --check server/system-reset.js && node --check server/database-backup.js && node --check server/daily-report.js && node --check server/receipt.js && node --check server/report.js && node --check server/pdf.js && node --check server/session-reminders.js && node --check server/index.js && node --check api/index.js && node --check scripts/setup.js && node --check scripts/setup-course-library-storage.js && node --check scripts/migrate.js && node --check scripts/db-upgrade.js && node --check scripts/local-postgres.js && node --check public/app.js && node --check public/ai-chat.js && node --check public/certificate-print.js && node --check tests/ai-assistant.test.js && node --check tests/system-reset.test.js && node --check tests/daily-report.test.js && node --check tests/payment-receipt.test.js && node --check tests/share-links.test.js && node --check tests/share-routes.test.js && node --check tests/database-backup.test.js"
+    "check:interactive-study": "node --check server/interactive-study.js && node --check public/interactive-study.js && node --check tests/interactive-study.test.js",
+    "check": "node --check server/app.js && node --check server/db.js && node --check server/ai-assistant.js && node --check server/ai-intents.js && node --check server/academic.js && node --check server/share-links.js && node --check server/database-backup.js && node --check server/daily-report.js && node --check server/receipt.js && node --check server/report.js && node --check server/pdf.js && node --check server/session-reminders.js && node --check server/index.js && node --check api/index.js && node --check scripts/setup.js && node --check scripts/setup-course-library-storage.js && node --check scripts/migrate.js && node --check scripts/db-upgrade.js && node --check scripts/local-postgres.js && node --check scripts/dev-local.js && node --check scripts/sync-local-data.js && node --check public/app.js && node --check public/ai-chat.js && node --check public/certificate-print.js && node --check tests/ai-assistant.test.js && node --check tests/daily-report.test.js && node --check tests/payment-receipt.test.js && node --check tests/share-links.test.js && node --check tests/share-routes.test.js && node --check tests/database-backup.test.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1144.0",
@@ -32,6 +35,7 @@
     "express": "^5.1.0",
     "express-rate-limit": "^8.1.0",
     "flatpickr": "^4.6.13",
+    "google-auth-library": "^11.1.0",
     "helmet": "^8.1.0",
     "html5-qrcode": "^2.3.8",
     "pg": "^8.23.1",

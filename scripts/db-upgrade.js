@@ -14,7 +14,10 @@ if (!connectionString) {
 const pool = new pg.Pool({ connectionString });
 const migrations = new Map([
   [13, 'ai_chat'],
-  [14, 'ai_pending_actions']
+  [14, 'ai_pending_actions'],
+  [15, 'google_oauth'],
+  [16, 'permissions'],
+  [17, 'interactive_study']
 ]);
 
 try {
@@ -42,7 +45,7 @@ try {
     await client.query('COMMIT');
     console.log(applied.length
       ? `Applied database migration(s): ${applied.join(', ')}.`
-      : 'AI chat database migrations are already applied.');
+      : 'Database migrations are already applied.');
   } catch (error) {
     await client.query('ROLLBACK');
     throw error;
